@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "ProBoxerTimmer",
+    "slug": "pro-boxer-timmer",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "platforms": ["android", "ios"],
+    "ios": { "bundleIdentifier": "com.henbryant.proboxertimmer" },
+    "android": { "package": "com.henbryant.proboxertimmer" },
+    "plugins": [
+      ["expo-audio", { "microphonePermission": false, "recordAudioAndroid": false, "enableBackgroundPlayback": false }]
+    ]
+  }
+}
