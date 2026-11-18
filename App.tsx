@@ -1,20 +1,17 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, BackHandler, Keyboard, Pressable, ScrollView, StatusBar, StyleSheet,
-  Text, TextInput, useWindowDimensions, View,
+  Alert, BackHandler, Pressable, ScrollView, StatusBar, StyleSheet,
+  Text, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { useKeepAwake } from 'expo-keep-awake';
 import { clockLayout } from './src/clockLayout';
-import { defaults, formatTime, parseSetting, type Settings } from './src/timer';
+import { colors } from './src/colors';
+import { SettingWheels } from './src/SettingWheels';
+import { defaults, formatTime, type Settings } from './src/timer';
 import { useWorkout } from './src/useWorkout';
 import { useGong } from './src/useGong';
-
-const colors = {
-  background: '#151715', panel: '#222522', border: '#454B45', white: '#F8F8EF',
-  muted: '#B8BDB3', amber: '#FFBD70', rest: '#9ED9C1', error: '#FFAB9E', led: '#FF4036',
-};
 
 const clockFonts = { DSEG: require('./assets/DSEG7Classic-Bold.ttf') };
 
@@ -25,8 +22,8 @@ function KeepScreenOn() {
 
 type TimerIcon = 'pause' | 'play' | 'stop' | 'back' | 'restart';
 
-function IconButton({ icon, label, onPress }: {
-  icon: TimerIcon; label: string; onPress: () => void;
+function IconButton({ icon, label, onPress, disabled = false }: {
+  icon: TimerIcon; label: string; onPress: () => void; disabled?: boolean;
 }) {
   const icons = {
     pause: <View style={s.pauseIcon}><View style={s.pauseBar} /><View style={s.pauseBar} /></View>,
@@ -37,7 +34,8 @@ function IconButton({ icon, label, onPress }: {
   };
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
-      style={({ pressed }) => [s.iconButton, pressed && s.pressed]}>
+      disabled={disabled} accessibilityState={{ disabled }}
+      style={({ pressed }) => [s.iconButton, disabled && s.disabled, pressed && s.pressed]}>
       {icons[icon]}
     </Pressable>
   );
@@ -63,40 +61,33 @@ function Clock({ seconds, landscape }: { seconds: number; landscape: boolean }) 
   );
 }
 
-const fields = [
-  { key: 'work', label: 'ラウンド時間', unit: '秒', min: 1, max: 5999 },
-  { key: 'rest', label: 'インターバル', unit: '秒', min: 0, max: 5999 },
-  { key: 'rounds', label: 'ラウンド数', unit: '回', min: 1, max: 99 },
-] as const;
-
 function TimerApp() {
   const gong = useGong();
-  const { session, start, togglePause, reset } = useWorkout(gong.ring);
-  const [values, setValues] = useState({
-    work: String(defaults.work), rest: String(defaults.rest), rounds: String(defaults.rounds),
-  });
-  const [submitted, setSubmitted] = useState(false);
+  const { session, start, togglePause, rewind, end } = useWorkout(gong.ring);
+  const [settings, setSettings] = useState(defaults);
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
+  const wideSettings = landscape && width >= 620;
 
-  function begin() {
-    setSubmitted(true);
-    const settings: Settings = { ...defaults };
-    for (const field of fields) {
-      const parsed = parseSetting(values[field.key], field.min, field.max);
-      if (parsed === null) return;
-      settings[field.key] = parsed;
-    }
-    Keyboard.dismiss();
-    setSubmitted(false);
-    start(settings);
+  function changeSetting(key: keyof Settings, update: (value: number) => number) {
+    setSettings(previous => {
+      const value = update(previous[key]);
+      return previous[key] === value ? previous : { ...previous, [key]: value };
+    });
   }
 
   function leave() {
-    if (!session || session.frame.phase === 'finished') return reset();
+    if (!session || session.ready || session.frame.phase === 'finished') return end();
     Alert.alert('練習を終了しますか？', '現在の計時を終了して設定に戻ります。', [
       { text: 'キャンセル', style: 'cancel' },
-      { text: '終了する', style: 'destructive', onPress: reset },
+      { text: '終了する', style: 'destructive', onPress: end },
+    ]);
+  }
+
+  function confirmReset() {
+    Alert.alert('タイマーをリセットしますか？', '同じ設定で第1ラウンドの開始前に戻ります。', [
+      { text: 'キャンセル', style: 'cancel' },
+      { text: 'リセット', style: 'destructive', onPress: rewind },
     ]);
   }
 
@@ -107,39 +98,23 @@ function TimerApp() {
       return true;
     });
     return () => sub.remove();
-  }, [session?.frame.phase]);
+  }, [session?.frame.phase, session?.ready]);
 
   const soundError = gong.error && <Text style={s.error}>ゴング音を再生できませんでした。</Text>;
 
   if (!session) {
+    const invalidDuration = settings.work === 0;
     return (
-      <ScrollView contentContainerStyle={[s.settings, landscape && s.landscapeSettings]} keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets>
+      <ScrollView nestedScrollEnabled contentContainerStyle={[s.settings, landscape && s.landscapeSettings]}>
         <StatusBar barStyle="light-content" hidden={false} />
-        <View style={[s.form, landscape && s.landscapeForm]}>
+        <View style={[s.form, wideSettings && s.wideForm]}>
           <Text accessibilityRole="header" style={[s.title, landscape && s.landscapeTitle]}>練習設定</Text>
-          {fields.map(({ key, label, unit, min, max }) => {
-            const parsed = parseSetting(values[key], min, max);
-            return (
-              <View key={key} style={[s.field, landscape && s.landscapeField]}>
-                <View style={s.row}>
-                  <View style={s.fieldName}>
-                    <Text style={s.label}>{label}</Text>
-                    {key !== 'rounds' && <Text style={s.preview}>{parsed === null ? '—' : formatTime(parsed)}</Text>}
-                  </View>
-                  <TextInput accessibilityLabel={label + '（' + unit + '）'} style={s.input}
-                    keyboardType="number-pad" value={values[key]} selectTextOnFocus
-                    onChangeText={value => setValues(old => ({ ...old, [key]: value }))} />
-                  <Text style={s.unit}>{unit}</Text>
-                </View>
-                {submitted && parsed === null &&
-                  <Text style={s.error}>{min}〜{max}の整数で入力してください。</Text>}
-              </View>
-            );
-          })}
+          <SettingWheels settings={settings} wide={wideSettings} onChange={changeSetting} />
+          {invalidDuration && <Text style={s.error}>ラウンド時間は1秒以上に設定してください。</Text>}
           {soundError}
-          <Pressable accessibilityRole="button" onPress={begin}
-            style={({ pressed }) => [s.start, pressed && s.pressed]}>
+          <Pressable accessibilityRole="button" disabled={invalidDuration}
+            accessibilityState={{ disabled: invalidDuration }} onPress={() => start(settings)}
+            style={({ pressed }) => [s.start, invalidDuration && s.disabled, pressed && s.pressed]}>
             <Text style={s.startLabel}>練習を開始</Text>
           </Pressable>
         </View>
@@ -147,10 +122,11 @@ function TimerApp() {
     );
   }
 
-  const { frame, settings } = session;
+  const { frame, ready } = session;
+  const sessionSettings = session.settings;
   const finished = frame.phase === 'finished';
   const rest = frame.phase === 'rest';
-  const paused = session.startedAt === null && !finished;
+  const paused = session.startedAt === null && !finished && !ready;
   const phase = finished ? '練習終了' : rest ? '休憩' : 'ラウンド';
 
   return (
@@ -160,20 +136,22 @@ function TimerApp() {
       <View style={s.top}>
         <View style={s.status}>
           <Text style={[s.phase, { color: rest ? colors.rest : colors.amber }]}>
-            {phase}{!finished && ' ' + frame.round + '/' + settings.rounds}{paused && ' · 一時停止'}
+            {phase}{!finished && ' ' + frame.round + '/' + sessionSettings.rounds}
+            {ready && ' · 開始前'}{paused && ' · 一時停止'}
           </Text>
           {soundError}
         </View>
         <View style={s.controls}>
-          <IconButton icon={finished ? 'restart' : paused ? 'play' : 'pause'}
-            label={finished ? 'もう一度開始' : paused ? '再開' : '一時停止'}
-            onPress={finished ? () => start(settings) : togglePause} />
+          <IconButton icon={finished ? 'restart' : paused || ready ? 'play' : 'pause'}
+            label={finished ? 'もう一度開始' : ready ? '開始' : paused ? '再開' : '一時停止'}
+            onPress={finished ? () => start(sessionSettings) : togglePause} />
+          {!finished && <IconButton icon="restart" label="リセット" onPress={confirmReset} disabled={ready} />}
           <IconButton icon={finished ? 'back' : 'stop'}
             label={finished ? '設定に戻る' : '終了'} onPress={leave} />
         </View>
       </View>
       {finished ? (
-        <View style={s.center}><Text style={s.summary}>全{settings.rounds}ラウンド完了</Text></View>
+        <View style={s.center}><Text style={s.summary}>全{sessionSettings.rounds}ラウンド完了</Text></View>
       ) : <Clock seconds={frame.seconds} landscape={landscape} />}
     </View>
   );
@@ -191,21 +169,12 @@ export default function App() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  settings: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  settings: { flexGrow: 1, justifyContent: 'center', padding: 18 },
   landscapeSettings: { paddingVertical: 8 },
   form: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 16 },
-  landscapeForm: { gap: 8 },
-  title: { color: colors.white, fontSize: 34, fontWeight: '700', marginBottom: 8 },
-  landscapeTitle: { fontSize: 26, marginBottom: 0 },
-  field: { borderBottomColor: colors.border, borderBottomWidth: 1, paddingBottom: 14 },
-  landscapeField: { paddingBottom: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  fieldName: { flex: 1 },
-  label: { color: colors.white, fontSize: 16, fontWeight: '600' },
-  preview: { color: colors.muted, fontSize: 15, fontVariant: ['tabular-nums'], marginTop: 4 },
-  input: { color: colors.white, backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1,
-    borderRadius: 8, minWidth: 84, minHeight: 48, paddingHorizontal: 12, textAlign: 'right', fontSize: 21 },
-  unit: { color: colors.muted, fontSize: 16 },
+  wideForm: { maxWidth: 820, gap: 10 },
+  title: { color: colors.white, fontSize: 34, fontWeight: '700' },
+  landscapeTitle: { fontSize: 26 },
   error: { color: colors.error, marginTop: 4 },
   timer: { flex: 1, paddingVertical: 4 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12 },
@@ -217,7 +186,7 @@ const s = StyleSheet.create({
   clock: { width: '100%', textAlign: 'center', color: colors.led, includeFontPadding: false },
   digital: { fontFamily: 'DSEG' },
   summary: { color: colors.white, fontSize: 32, fontWeight: '700', marginHorizontal: 12 },
-  controls: { flexDirection: 'row', gap: 6 },
+  controls: { flexDirection: 'row', gap: 14 },
   iconButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.panel,
     borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },
   pauseIcon: { flexDirection: 'row', gap: 4 },
@@ -230,5 +199,6 @@ const s = StyleSheet.create({
   start: { minHeight: 52, paddingHorizontal: 20, borderRadius: 10, justifyContent: 'center',
     alignItems: 'center', backgroundColor: colors.amber },
   startLabel: { color: colors.background, fontSize: 17, fontWeight: '700' },
+  disabled: { opacity: 0.45 },
   pressed: { opacity: 0.74 },
 });

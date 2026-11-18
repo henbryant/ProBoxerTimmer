@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, formatTime, frameAt, isGongBoundary, parseSetting } from '../src/timer.ts';
+import { defaults, formatTime, frameAt, isGongBoundary, prepareSession } from '../src/timer.ts';
 
 test('two rounds ring on start, entering rest, starting round two and finishing', () => {
   const settings = { work: 10, rest: 3, rounds: 2 };
@@ -39,10 +39,11 @@ test('the timer keeps the same five-character display up to the maximum duration
   assert.equal(formatTime(5999), '99:59');
 });
 
-test('accepts only whole numbers inside the allowed range', () => {
-  for (const input of ['', ' ', '-1', '1.5', '1e1', '100']) {
-    assert.equal(parseSetting(input, 1, 99), null);
-  }
-  assert.equal(parseSetting('0', 0, 5999), 0);
-  assert.equal(parseSetting('03', 1, 99), 3);
+test('reset prepares round one at the configured duration without starting the clock', () => {
+  const settings = { work: 75, rest: 18, rounds: 4 };
+  const ready = prepareSession(settings);
+  assert.deepEqual(ready, {
+    settings, elapsed: 0, startedAt: null, ready: true,
+    frame: { phase: 'work', round: 1, seconds: 75 },
+  });
 });

@@ -2,6 +2,13 @@ export type Settings = { work: number; rest: number; rounds: number };
 export const defaults: Settings = { work: 180, rest: 30, rounds: 3 };
 export type Phase = 'work' | 'rest' | 'finished';
 export type Frame = { phase: Phase; round: number; seconds: number };
+export type Session = {
+  settings: Settings;
+  elapsed: number;
+  startedAt: number | null;
+  frame: Frame;
+  ready: boolean;
+};
 
 export function frameAt(settings: Settings, elapsedMs: number): Frame {
   const { work, rest, rounds } = settings;
@@ -26,7 +33,6 @@ export function formatTime(seconds: number) {
   return minutes + ':' + (seconds % 60).toString().padStart(2, '0');
 }
 
-export function parseSetting(value: string, min: number, max: number) {
-  const number = Number(value);
-  return /^\d+$/.test(value) && number >= min && number <= max ? number : null;
+export function prepareSession(settings: Settings): Session {
+  return { settings, elapsed: 0, startedAt: null, frame: frameAt(settings, 0), ready: true };
 }
