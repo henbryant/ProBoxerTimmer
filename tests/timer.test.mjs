@@ -32,6 +32,13 @@ test('a single round ends directly and defaults display in minutes and seconds',
   assert.equal(formatTime(defaults.rest), '00:30');
 });
 
+test('the timer keeps the same five-character display up to the maximum duration', () => {
+  assert.equal(formatTime(0), '00:00');
+  assert.equal(formatTime(59), '00:59');
+  assert.equal(formatTime(60), '01:00');
+  assert.equal(formatTime(5999), '99:59');
+});
+
 test('accepts only whole numbers inside the allowed range', () => {
   for (const input of ['', ' ', '-1', '1.5', '1e1', '100']) {
     assert.equal(parseSetting(input, 1, 99), null);

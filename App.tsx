@@ -1,32 +1,65 @@
 import { useEffect, useState } from 'react';
 import {
   Alert, BackHandler, Keyboard, Pressable, ScrollView, StatusBar, StyleSheet,
-  Switch, Text, TextInput, useWindowDimensions, View,
+  Text, TextInput, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { useFonts } from 'expo-font';
 import { useKeepAwake } from 'expo-keep-awake';
+import { clockLayout } from './src/clockLayout';
 import { defaults, formatTime, parseSetting, type Settings } from './src/timer';
 import { useWorkout } from './src/useWorkout';
 import { useGong } from './src/useGong';
 
 const colors = {
   background: '#151715', panel: '#222522', border: '#454B45', white: '#F8F8EF',
-  muted: '#B8BDB3', amber: '#FFBD70', rest: '#9ED9C1', error: '#FFAB9E',
+  muted: '#B8BDB3', amber: '#FFBD70', rest: '#9ED9C1', error: '#FFAB9E', led: '#FF4036',
 };
+
+const clockFonts = { DSEG: require('./assets/DSEG7Classic-Bold.ttf') };
 
 function KeepScreenOn() {
   useKeepAwake('boxing-timer');
   return null;
 }
 
-function Action({ label, onPress, secondary = false }: {
-  label: string; onPress: () => void; secondary?: boolean;
+type TimerIcon = 'pause' | 'play' | 'stop' | 'back' | 'restart';
+
+function IconButton({ icon, label, onPress }: {
+  icon: TimerIcon; label: string; onPress: () => void;
 }) {
+  const icons = {
+    pause: <View style={s.pauseIcon}><View style={s.pauseBar} /><View style={s.pauseBar} /></View>,
+    play: <View style={s.playIcon} />,
+    stop: <View style={s.stopIcon} />,
+    back: <Text style={s.symbol}>←</Text>,
+    restart: <Text style={s.symbol}>↻</Text>,
+  };
   return (
-    <Pressable accessibilityRole="button" onPress={onPress}
-      style={({ pressed }) => [s.action, secondary ? s.secondary : s.primary, pressed && s.pressed]}>
-      <Text style={[s.actionLabel, secondary && s.secondaryLabel]}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
+      style={({ pressed }) => [s.iconButton, pressed && s.pressed]}>
+      {icons[icon]}
     </Pressable>
+  );
+}
+
+function Clock({ seconds, landscape }: { seconds: number; landscape: boolean }) {
+  const [loaded] = useFonts(clockFonts);
+  const [bounds, setBounds] = useState({ width: 0, height: 0 });
+  const { fontSize, scaleY } = clockLayout(bounds, landscape && loaded);
+
+  return (
+    <View style={[s.center, landscape ? s.landscapeClockArea : s.clockArea]}
+      onLayout={({ nativeEvent: { layout } }) => {
+        setBounds({ width: layout.width, height: layout.height });
+      }}>
+      {fontSize > 0 && (
+        <Text allowFontScaling={false} numberOfLines={1} adjustsFontSizeToFit
+          style={[s.clock, loaded && s.digital, { fontSize, transform: [{ scaleY }] }]}>
+          {formatTime(seconds)}
+        </Text>
+      )}
+    </View>
   );
 }
 
@@ -44,6 +77,7 @@ function TimerApp() {
   });
   const [submitted, setSubmitted] = useState(false);
   const { width, height } = useWindowDimensions();
+  const landscape = width > height;
 
   function begin() {
     setSubmitted(true);
@@ -75,25 +109,19 @@ function TimerApp() {
     return () => sub.remove();
   }, [session?.frame.phase]);
 
-  const soundControl = (
-    <View style={s.sound}>
-      <Text style={s.label}>ゴング音</Text>
-      <Switch accessibilityLabel="ゴング音" value={gong.enabled} onValueChange={gong.toggle}
-        trackColor={{ false: colors.border, true: '#936634' }} thumbColor={gong.enabled ? colors.amber : colors.muted} />
-    </View>
-  );
-  const soundError = gong.enabled && gong.error && <Text style={s.error}>ゴング音を再生できませんでした。</Text>;
+  const soundError = gong.error && <Text style={s.error}>ゴング音を再生できませんでした。</Text>;
 
   if (!session) {
     return (
-      <ScrollView contentContainerStyle={s.settings} keyboardShouldPersistTaps="handled"
+      <ScrollView contentContainerStyle={[s.settings, landscape && s.landscapeSettings]} keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets>
-        <View style={s.form}>
-          <Text accessibilityRole="header" style={s.title}>練習設定</Text>
+        <StatusBar barStyle="light-content" hidden={false} />
+        <View style={[s.form, landscape && s.landscapeForm]}>
+          <Text accessibilityRole="header" style={[s.title, landscape && s.landscapeTitle]}>練習設定</Text>
           {fields.map(({ key, label, unit, min, max }) => {
             const parsed = parseSetting(values[key], min, max);
             return (
-              <View key={key} style={s.field}>
+              <View key={key} style={[s.field, landscape && s.landscapeField]}>
                 <View style={s.row}>
                   <View style={s.fieldName}>
                     <Text style={s.label}>{label}</Text>
@@ -109,9 +137,11 @@ function TimerApp() {
               </View>
             );
           })}
-          {soundControl}
           {soundError}
-          <Action label="練習を開始" onPress={begin} />
+          <Pressable accessibilityRole="button" onPress={begin}
+            style={({ pressed }) => [s.start, pressed && s.pressed]}>
+            <Text style={s.startLabel}>練習を開始</Text>
+          </Pressable>
         </View>
       </ScrollView>
     );
@@ -121,41 +151,30 @@ function TimerApp() {
   const finished = frame.phase === 'finished';
   const rest = frame.phase === 'rest';
   const paused = session.startedAt === null && !finished;
-  const lastRound = frame.round === settings.rounds;
-  const next = lastRound ? '次は練習終了'
-    : rest || settings.rest === 0 ? '次はラウンド ' + (frame.round + 1) + '/' + settings.rounds
-    : '次は休憩 ' + formatTime(settings.rest);
-  const compact = height < 470;
+  const phase = finished ? '練習終了' : rest ? '休憩' : 'ラウンド';
 
   return (
-    <View style={[s.timer, compact && s.compact]}>
+    <View style={s.timer}>
+      <StatusBar barStyle="light-content" hidden />
       {!finished && <KeepScreenOn />}
       <View style={s.top}>
-        <Text style={[s.phase, { color: rest ? colors.rest : colors.amber }]}>
-          {finished ? '練習終了' : rest ? '休憩' : 'ラウンド'}{paused ? ' · 一時停止' : ''}
-        </Text>
-        {soundControl}
+        <View style={s.status}>
+          <Text style={[s.phase, { color: rest ? colors.rest : colors.amber }]}>
+            {phase}{!finished && ' ' + frame.round + '/' + settings.rounds}{paused && ' · 一時停止'}
+          </Text>
+          {soundError}
+        </View>
+        <View style={s.controls}>
+          <IconButton icon={finished ? 'restart' : paused ? 'play' : 'pause'}
+            label={finished ? 'もう一度開始' : paused ? '再開' : '一時停止'}
+            onPress={finished ? () => start(settings) : togglePause} />
+          <IconButton icon={finished ? 'back' : 'stop'}
+            label={finished ? '設定に戻る' : '終了'} onPress={leave} />
+        </View>
       </View>
-      <View style={s.center}>
-        {finished ? (
-          <Text style={s.summary}>全{settings.rounds}ラウンド完了</Text>
-        ) : (
-          <>
-            <Text style={s.progress}>{'ラウンド ' + frame.round + ' / ' + settings.rounds + (rest ? ' 完了' : '')}</Text>
-            <Text numberOfLines={1} adjustsFontSizeToFit
-              style={[s.clock, { fontSize: Math.min(width * 0.30, height * 0.36, 300) }]}>
-              {formatTime(frame.seconds)}
-            </Text>
-            <Text style={s.next}>{next}</Text>
-          </>
-        )}
-      </View>
-      {soundError}
-      <View style={s.actions}>
-        <Action label={finished ? '設定に戻る' : '終了'} onPress={leave} secondary />
-        <Action label={finished ? 'もう一度開始' : paused ? '再開' : '一時停止'}
-          onPress={finished ? () => start(settings) : togglePause} />
-      </View>
+      {finished ? (
+        <View style={s.center}><Text style={s.summary}>全{settings.rounds}ラウンド完了</Text></View>
+      ) : <Clock seconds={frame.seconds} landscape={landscape} />}
     </View>
   );
 }
@@ -164,7 +183,6 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={s.safe}>
-        <StatusBar barStyle="light-content" />
         <TimerApp />
       </SafeAreaView>
     </SafeAreaProvider>
@@ -174,9 +192,13 @@ export default function App() {
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
   settings: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  landscapeSettings: { paddingVertical: 8 },
   form: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 16 },
+  landscapeForm: { gap: 8 },
   title: { color: colors.white, fontSize: 34, fontWeight: '700', marginBottom: 8 },
+  landscapeTitle: { fontSize: 26, marginBottom: 0 },
   field: { borderBottomColor: colors.border, borderBottomWidth: 1, paddingBottom: 14 },
+  landscapeField: { paddingBottom: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   fieldName: { flex: 1 },
   label: { color: colors.white, fontSize: 16, fontWeight: '600' },
@@ -184,24 +206,29 @@ const s = StyleSheet.create({
   input: { color: colors.white, backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1,
     borderRadius: 8, minWidth: 84, minHeight: 48, paddingHorizontal: 12, textAlign: 'right', fontSize: 21 },
   unit: { color: colors.muted, fontSize: 16 },
-  sound: { flexDirection: 'row', alignItems: 'center', gap: 12, justifyContent: 'space-between' },
   error: { color: colors.error, marginTop: 4 },
-  timer: { flex: 1, padding: 22 },
-  compact: { paddingVertical: 4 },
-  top: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' },
-  phase: { fontSize: 20, fontWeight: '700' },
+  timer: { flex: 1, paddingVertical: 4 },
+  top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12 },
+  status: { flex: 1 },
+  phase: { fontSize: 16, fontWeight: '700' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  progress: { fontSize: 20, color: colors.muted, fontVariant: ['tabular-nums'] },
-  clock: { width: '100%', textAlign: 'center', fontWeight: '700', fontVariant: ['tabular-nums'],
-    color: colors.white, includeFontPadding: false },
-  next: { color: colors.muted, fontSize: 19 },
-  summary: { color: colors.white, fontSize: 32, fontWeight: '700' },
-  actions: { flexDirection: 'row', justifyContent: 'center', gap: 12 },
-  action: { minHeight: 52, paddingHorizontal: 20, borderRadius: 10, justifyContent: 'center',
-    alignItems: 'center', flexGrow: 1 },
-  primary: { backgroundColor: colors.amber },
-  secondary: { backgroundColor: colors.panel, borderWidth: 1, borderColor: colors.border },
-  actionLabel: { color: colors.background, fontSize: 17, fontWeight: '700' },
-  secondaryLabel: { color: colors.white },
+  clockArea: { marginHorizontal: 12 },
+  landscapeClockArea: { marginHorizontal: 4 },
+  clock: { width: '100%', textAlign: 'center', color: colors.led, includeFontPadding: false },
+  digital: { fontFamily: 'DSEG' },
+  summary: { color: colors.white, fontSize: 32, fontWeight: '700', marginHorizontal: 12 },
+  controls: { flexDirection: 'row', gap: 6 },
+  iconButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.panel,
+    borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },
+  pauseIcon: { flexDirection: 'row', gap: 4 },
+  pauseBar: { width: 4, height: 16, borderRadius: 1, backgroundColor: colors.white },
+  playIcon: { borderLeftWidth: 13, borderTopWidth: 8, borderBottomWidth: 8,
+    borderLeftColor: colors.white, borderTopColor: 'transparent', borderBottomColor: 'transparent',
+    marginLeft: 2 },
+  stopIcon: { width: 14, height: 14, borderRadius: 2, backgroundColor: colors.white },
+  symbol: { fontSize: 22, color: colors.white, includeFontPadding: false },
+  start: { minHeight: 52, paddingHorizontal: 20, borderRadius: 10, justifyContent: 'center',
+    alignItems: 'center', backgroundColor: colors.amber },
+  startLabel: { color: colors.background, fontSize: 17, fontWeight: '700' },
   pressed: { opacity: 0.74 },
 });
