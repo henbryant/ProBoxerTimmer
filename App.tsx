@@ -15,6 +15,8 @@ import { useWorkout } from './src/useWorkout';
 import { useGong } from './src/useGong';
 
 const clockFonts = { DSEG: require('./assets/DSEG7Classic-Bold.ttf') };
+// This font includes the glyphs used in the settings motto.
+const mottoFonts = { KouzanBrush: require('./assets/KouzanBrush-Motto.ttf') };
 
 function KeepScreenOn() {
   useKeepAwake('boxing-timer');
@@ -64,6 +66,7 @@ function Clock({ seconds, landscape }: { seconds: number; landscape: boolean }) 
 }
 
 function TimerApp() {
+  const [mottoFontLoaded] = useFonts(mottoFonts);
   const gong = useGong();
   const { session, start, togglePause, rewind, stop, clear } = useWorkout(gong.ring);
   const { settings, setSettings, save, error: storageError } = useLastWorkoutSettings();
@@ -151,18 +154,32 @@ function TimerApp() {
   const settingsError = storageError && <Text accessibilityLiveRegion="polite" style={s.error}>{storageError}</Text>;
 
   if (draft) {
+    const headingSize = landscape ? s.landscapeHeadingSize : s.headingSize;
+    const mottoSize = landscape ? s.landscapeMottoSize : s.mottoSize;
+
     return (
       <ScrollView nestedScrollEnabled contentContainerStyle={[s.settings, landscape && s.landscapeSettings]}>
         <StatusBar barStyle="light-content" hidden={landscape} />
         <View style={[s.form, wideSettings && s.wideForm]}>
-          <View style={s.settingsHeading}>
-            <IconButton icon="back" label="設定をキャンセル" onPress={() => setDraft(null)} />
-            <Text accessibilityRole="header" style={[s.title, landscape && s.landscapeTitle]}>設定</Text>
+          <View style={[s.settingsHeading, wideSettings && s.wideSettingsHeading]}>
+            <View style={[s.settingsTitle, wideSettings && s.settingsHeadingSide]}>
+              <IconButton icon="back" label="設定をキャンセル" onPress={() => setDraft(null)} />
+              <Text accessibilityRole="header" style={[s.title, headingSize]}>設定</Text>
+            </View>
+            <Text style={[
+              s.settingsMotto, mottoSize, wideSettings && s.wideSettingsMotto,
+              mottoFontLoaded && s.settingsMottoBrush,
+            ]}>
+              夢は必ず実現すること
+            </Text>
+            {wideSettings && <View style={s.settingsHeadingSide} />}
           </View>
-          <SettingWheels key={wheelVersion} settings={draft} wide={wideSettings} onChange={changeSetting} />
-          {draft.work === 0 && <Text style={s.error}>ラウンド時間は1秒以上に設定してください。</Text>}
-          {settingsError}
-          {soundError}
+          <View style={s.settingsBody}>
+            <SettingWheels key={wheelVersion} settings={draft} wide={wideSettings} onChange={changeSetting} />
+            {draft.work === 0 && <Text style={s.error}>ラウンド時間は1秒以上に設定してください。</Text>}
+            {settingsError}
+            {soundError}
+          </View>
           <View style={s.settingsActions}>
             <Pressable accessibilityRole="button" onPress={resetSettings}
               style={({ pressed }) => [s.settingsButton, s.resetSettingsButton, pressed && s.pressed]}>
@@ -210,18 +227,18 @@ function TimerApp() {
           {settingsError}
         </View>
         <View style={s.controls}>
+          {!terminal && (
+            <>
+              <IconButton icon="stop" label="終了" onPress={confirmStop} disabled={ready} />
+              <IconButton icon="restart" label="リセット" onPress={confirmReset} disabled={ready} />
+            </>
+          )}
           <IconButton icon={paused || ready || terminal ? 'play' : 'pause'}
             label={terminal ? 'もう一度開始' : ready ? '開始' : paused ? '再開' : '一時停止'}
             onPress={inProgress ? togglePause : () => {
               save(settings);
               start(settings);
             }} />
-          {!terminal && (
-            <>
-              <IconButton icon="restart" label="リセット" onPress={confirmReset} disabled={ready} />
-              <IconButton icon="stop" label="終了" onPress={confirmStop} disabled={ready} />
-            </>
-          )}
         </View>
       </View>
       <Clock seconds={clockSeconds} landscape={landscape} />
@@ -241,13 +258,23 @@ export default function App() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  settings: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12 },
-  landscapeSettings: { paddingTop: 6, paddingBottom: 8 },
-  form: { flexGrow: 1, width: '100%', maxWidth: 520, alignSelf: 'center', gap: 16 },
-  wideForm: { maxWidth: 820, gap: 10 },
-  settingsHeading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  title: { color: colors.white, fontSize: 34, fontWeight: '700' },
-  landscapeTitle: { fontSize: 26 },
+  settings: { flexGrow: 1, paddingHorizontal: 18, paddingVertical: 8 },
+  landscapeSettings: { paddingVertical: 6 },
+  form: { flexGrow: 1, width: '100%', maxWidth: 520, alignSelf: 'center', gap: 10 },
+  wideForm: { maxWidth: 820 },
+  settingsHeading: { minHeight: 52, gap: 4 },
+  wideSettingsHeading: { flexDirection: 'row', alignItems: 'center', gap: 0 },
+  settingsTitle: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingsHeadingSide: { width: '20%' },
+  settingsMotto: { color: colors.amber, fontWeight: '700', textAlign: 'center' },
+  settingsMottoBrush: { fontFamily: 'KouzanBrush', fontWeight: '400' },
+  wideSettingsMotto: { width: '60%' },
+  mottoSize: { fontSize: 34, lineHeight: 40 },
+  landscapeMottoSize: { fontSize: 44, lineHeight: 50 },
+  settingsBody: { flexGrow: 1, justifyContent: 'center' },
+  title: { color: colors.white, fontWeight: '700', flexShrink: 1 },
+  headingSize: { fontSize: 34, lineHeight: 40 },
+  landscapeHeadingSize: { fontSize: 26, lineHeight: 32 },
   error: { color: colors.error, marginTop: 4 },
   loading: { color: colors.muted, fontSize: 16 },
   timer: { flex: 1, paddingVertical: 4 },
@@ -270,7 +297,7 @@ const s = StyleSheet.create({
     marginLeft: 2 },
   stopIcon: { width: 14, height: 14, borderRadius: 2, backgroundColor: colors.white },
   iconImage: { width: 24, height: 24, tintColor: colors.white },
-  settingsActions: { flexDirection: 'row', gap: 12, marginTop: 'auto', paddingTop: 6 },
+  settingsActions: { flexDirection: 'row', gap: 12 },
   settingsButton: { flex: 1, minHeight: 52, paddingHorizontal: 8, paddingVertical: 8,
     borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   apply: { backgroundColor: colors.amber },
