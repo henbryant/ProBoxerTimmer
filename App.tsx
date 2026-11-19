@@ -166,10 +166,14 @@ function TimerApp() {
               <IconButton icon="back" label="設定をキャンセル" onPress={() => setDraft(null)} />
               <Text accessibilityRole="header" style={[s.title, headingSize]}>設定</Text>
             </View>
-            <Text style={[
-              s.settingsMotto, mottoSize, wideSettings && s.wideSettingsMotto,
-              mottoFontLoaded && s.settingsMottoBrush,
-            ]}>
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              style={[
+                s.settingsMotto, mottoSize, wideSettings && s.wideSettingsMotto,
+                mottoFontLoaded && s.settingsMottoBrush,
+              ]}>
               夢は必ず実現すること
             </Text>
             {wideSettings && <View style={s.settingsHeadingSide} />}
@@ -265,10 +269,10 @@ const s = StyleSheet.create({
   settingsHeading: { minHeight: 52, gap: 4 },
   wideSettingsHeading: { flexDirection: 'row', alignItems: 'center', gap: 0 },
   settingsTitle: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  settingsHeadingSide: { width: '20%' },
+  settingsHeadingSide: { width: 130 },
   settingsMotto: { color: colors.amber, fontWeight: '700', textAlign: 'center' },
   settingsMottoBrush: { fontFamily: 'KouzanBrush', fontWeight: '400' },
-  wideSettingsMotto: { width: '60%' },
+  wideSettingsMotto: { flex: 1 },
   mottoSize: { fontSize: 34, lineHeight: 40 },
   landscapeMottoSize: { fontSize: 44, lineHeight: 50 },
   settingsBody: { flexGrow: 1, justifyContent: 'center' },
