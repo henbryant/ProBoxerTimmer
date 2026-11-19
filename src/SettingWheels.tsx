@@ -1,24 +1,21 @@
-import { useRef, type ComponentRef } from 'react';
+import { useMemo, useRef, type ComponentRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { colors } from './colors';
-import type { Settings } from './timer';
+import { maxRestSeconds, maxRounds, maxWorkSeconds, type Settings } from './timer';
 
 const rowHeight = 40;
-const minutes = Array.from({ length: 100 }, (_, index) => index);
-const seconds = Array.from({ length: 60 }, (_, index) => index);
-const rounds = Array.from({ length: 99 }, (_, index) => index + 1);
-
-function NumberWheel({ label, unit, value, options, onChange }: {
+function NumberWheel({ label, unit, value, min = 0, max, onChange }: {
   label: string;
   unit: string;
   value: number;
-  options: number[];
+  min?: number;
+  max: number;
   onChange: (value: number) => void;
 }) {
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
-  const min = options[0];
-  const max = options[options.length - 1];
+  const options = useMemo(() => Array.from({ length: max - min + 1 }, (_, index) => min + index), [min, max]);
   const offset = useRef({ x: 0, y: (value - min) * rowHeight }).current;
+  const adjustable = min < max;
 
   function select(next: number) {
     scroll.current?.scrollTo({ y: (next - min) * rowHeight, animated: false });
@@ -26,9 +23,9 @@ function NumberWheel({ label, unit, value, options, onChange }: {
   }
 
   return (
-    <View accessible accessibilityRole="adjustable" accessibilityLabel={label}
+    <View accessible accessibilityRole={adjustable ? 'adjustable' : 'text'} accessibilityLabel={label}
       accessibilityValue={{ min, max, now: value, text: value + unit }}
-      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+      accessibilityActions={adjustable ? [{ name: 'increment' }, { name: 'decrement' }] : []}
       onAccessibilityAction={({ nativeEvent: { actionName } }) => {
         if (actionName === 'increment' && value < max) select(value + 1);
         if (actionName === 'decrement' && value > min) select(value - 1);
@@ -40,7 +37,7 @@ function NumberWheel({ label, unit, value, options, onChange }: {
         <ScrollView ref={scroll} style={s.wheel} contentOffset={offset}
           contentContainerStyle={s.wheelContent} nestedScrollEnabled
           accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
-          showsVerticalScrollIndicator={false} bounces={false} overScrollMode="never"
+          showsVerticalScrollIndicator={false} scrollEnabled={adjustable} bounces={false} overScrollMode="never"
           snapToInterval={rowHeight} decelerationRate="fast" scrollEventThrottle={16}
           onScroll={({ nativeEvent: { contentOffset } }) => {
             const next = Math.min(max, Math.max(min, min + Math.round(contentOffset.y / rowHeight)));
@@ -61,19 +58,21 @@ function NumberWheel({ label, unit, value, options, onChange }: {
 
 type UpdateNumber = (previous: number) => number;
 
-function DurationWheels({ title, value, wide, onChange }: {
-  title: string; value: number; wide: boolean; onChange: (update: UpdateNumber) => void;
+function DurationWheels({ title, value, maximum, wide, onChange }: {
+  title: string; value: number; maximum: number; wide: boolean; onChange: (update: UpdateNumber) => void;
 }) {
   const wholeMinutes = Math.floor(value / 60);
   const remainingSeconds = value % 60;
+  const maxMinutes = Math.floor(maximum / 60);
+  const maxSeconds = Math.min(59, maximum - wholeMinutes * 60);
   return (
     <View style={[s.group, wide && s.duration]}>
       <Text style={s.label}>{title}</Text>
       <View style={s.wheels}>
-        <NumberWheel label={title + '（分）'} unit="分" value={wholeMinutes} options={minutes}
-          onChange={next => onChange(previous => next * 60 + previous % 60)} />
-        <NumberWheel label={title + '（秒）'} unit="秒" value={remainingSeconds} options={seconds}
-          onChange={next => onChange(previous => Math.floor(previous / 60) * 60 + next)} />
+        <NumberWheel label={title + '（分）'} unit="分" value={wholeMinutes} max={maxMinutes}
+          onChange={next => onChange(previous => Math.min(maximum, next * 60 + previous % 60))} />
+        <NumberWheel key={maxSeconds} label={title + '（秒）'} unit="秒" value={remainingSeconds} max={maxSeconds}
+          onChange={next => onChange(previous => Math.min(maximum, Math.floor(previous / 60) * 60 + next))} />
       </View>
     </View>
   );
@@ -84,13 +83,13 @@ export function SettingWheels({ settings, wide, onChange }: {
 }) {
   return (
     <View style={[s.groups, wide && s.wideGroups]}>
-      <DurationWheels title="ラウンド時間" value={settings.work} wide={wide}
+      <DurationWheels title="ラウンド時間" value={settings.work} maximum={maxWorkSeconds} wide={wide}
         onChange={update => onChange('work', update)} />
-      <DurationWheels title="インターバル" value={settings.rest} wide={wide}
+      <DurationWheels title="インターバル" value={settings.rest} maximum={maxRestSeconds} wide={wide}
         onChange={update => onChange('rest', update)} />
       <View style={[s.group, wide && s.roundsGroup]}>
         <Text style={s.label}>ラウンド数</Text>
-        <NumberWheel label="ラウンド数" unit="回" value={settings.rounds} options={rounds}
+        <NumberWheel label="ラウンド数" unit="回" value={settings.rounds} min={1} max={maxRounds}
           onChange={value => onChange('rounds', () => value)} />
       </View>
     </View>

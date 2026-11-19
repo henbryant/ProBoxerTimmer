@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { frameAt, isGongBoundary, prepareSession, type Session, type Settings } from './timer';
+import { frameAt, isGongBoundary, prepareSession, stopSession, type Session, type Settings } from './timer';
 
 export function useWorkout(gong: () => void) {
   const current = useRef<Session | null>(null);
@@ -51,15 +51,19 @@ export function useWorkout(gong: () => void) {
 
   function togglePause() {
     const previous = current.current;
-    if (!previous || previous.frame.phase === 'finished') return;
-    if (previous.ready) {
-      start(previous.settings);
-    } else if (previous.startedAt === null) {
+    if (!previous || previous.ready || previous.frame.phase === 'finished' || previous.frame.phase === 'stopped') return;
+    if (previous.startedAt === null) {
       publish({ ...previous, startedAt: performance.now() });
     } else {
       update(true);
     }
   }
 
-  return { session, start, togglePause, rewind, end: () => publish(null) };
+  function stop() {
+    const previous = current.current;
+    if (!previous || previous.ready || previous.frame.phase === 'finished') return;
+    publish(stopSession(previous));
+  }
+
+  return { session, start, togglePause, rewind, stop, clear: () => publish(null) };
 }

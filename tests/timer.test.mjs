@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaults, formatTime, frameAt, isGongBoundary, prepareSession } from '../src/timer.ts';
+import { defaults, formatTime, frameAt, isGongBoundary, prepareSession, stopSession } from '../src/timer.ts';
 
 test('two rounds ring on start, entering rest, starting round two and finishing', () => {
   const settings = { work: 10, rest: 3, rounds: 2 };
@@ -27,9 +27,26 @@ test('zero rest gives one cue for the shared end/start boundary', () => {
 });
 
 test('a single round ends directly and defaults display in minutes and seconds', () => {
-  assert.equal(frameAt({ ...defaults, rounds: 1 }, 180000).phase, 'finished');
+  const settings = { ...defaults, rounds: 1 };
+  const finished = { phase: 'finished', round: 1, seconds: 0 };
+  assert.deepEqual(frameAt(settings, 180000), finished);
+  assert.deepEqual(frameAt(settings, 200000), finished);
   assert.equal(formatTime(defaults.work), '03:00');
   assert.equal(formatTime(defaults.rest), '00:30');
+});
+
+test('a manual stop shows zero without marking the workout completed', () => {
+  const session = {
+    ...prepareSession(defaults),
+    frame: { phase: 'rest', round: 2, seconds: 24 },
+    ready: false,
+    startedAt: 1000,
+  };
+  assert.deepEqual(stopSession(session), {
+    ...session,
+    frame: { phase: 'stopped', round: 2, seconds: 0 },
+    startedAt: null,
+  });
 });
 
 test('the timer keeps the same five-character display up to the maximum duration', () => {

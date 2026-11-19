@@ -1,6 +1,9 @@
 export type Settings = { work: number; rest: number; rounds: number };
 export const defaults: Settings = { work: 180, rest: 30, rounds: 3 };
-export type Phase = 'work' | 'rest' | 'finished';
+export const maxWorkSeconds = 10 * 60;
+export const maxRestSeconds = 99 * 60 + 59;
+export const maxRounds = 12;
+export type Phase = 'work' | 'rest' | 'finished' | 'stopped';
 export type Frame = { phase: Phase; round: number; seconds: number };
 export type Session = {
   settings: Settings;
@@ -35,4 +38,37 @@ export function formatTime(seconds: number) {
 
 export function prepareSession(settings: Settings): Session {
   return { settings, elapsed: 0, startedAt: null, frame: frameAt(settings, 0), ready: true };
+}
+
+export function stopSession(session: Session): Session {
+  return {
+    ...session,
+    startedAt: null,
+    ready: false,
+    frame: { ...session.frame, phase: 'stopped', seconds: 0 },
+  };
+}
+
+export function restoreSettings(raw: string | null): Settings {
+  if (raw === null) return defaults;
+
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return defaults;
+  }
+  if (data === null || typeof data !== 'object') return defaults;
+
+  const saved = data as Partial<Record<keyof Settings, unknown>>;
+  return {
+    work: restoreNumber(saved.work, defaults.work, 1, maxWorkSeconds),
+    rest: restoreNumber(saved.rest, defaults.rest, 0, maxRestSeconds),
+    rounds: restoreNumber(saved.rounds, defaults.rounds, 1, maxRounds),
+  };
+}
+
+function restoreNumber(value: unknown, fallback: number, min: number, max: number) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < min) return fallback;
+  return Math.min(value, max);
 }
