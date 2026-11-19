@@ -9,6 +9,9 @@
 1ラウンドは最長10分、1回の練習は最大12ラウンドです。練習を開始すると3項目を端末に保存し、次にアプリを起動したときに復元します。
 
 ## タイマー画面
+| Timmer  | Settings |
+| ------------- | ------------- |
+| <img width="2622" height="1206" alt="Screenshot iPhone 18 Pro 2026-11-19 at 15 28 54" src="https://github.com/user-attachments/assets/5b26f4f9-01eb-4416-beeb-f30d6bc3ec95" />  |  <img width="2622" height="1206" alt="Screenshot iPhone 18 Pro 2026-11-19 at 15 29 06" src="https://github.com/user-attachments/assets/516835f5-805b-4768-a91b-ddb4e2e45bd0" /> |
 
 横画面では、残り時間を赤い7セグメント数字で画面いっぱいに表示します。左上の歯車の隣に「Round 1/3」のように進行を表示し、右上に一時停止・再開、リセット、終了のアイコンを配置しています。リセットすると第1ラウンドの開始前に戻ります。休憩に入ると休憩の残り時間に切り替わり、練習終了後は `00:00` を表示します。
 
