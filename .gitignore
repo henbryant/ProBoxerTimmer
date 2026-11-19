@@ -4,4 +4,8 @@ dist/
 android/
 ios/
 .DS_Store
-node_modules
+
+# IDE and Editor
+.idea/
+*.iml
+.vscode/
