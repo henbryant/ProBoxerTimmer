@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import {
-  Alert, BackHandler, Pressable, ScrollView, StatusBar, StyleSheet,
+  Alert, BackHandler, Image, Pressable, ScrollView, StatusBar, StyleSheet,
   Text, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { clockLayout } from './src/clockLayout';
 import { colors } from './src/colors';
 import { SettingWheels } from './src/SettingWheels';
 import { defaults, formatTime, type Settings } from './src/timer';
+import { useLastWorkoutSettings } from './src/useLastWorkoutSettings';
 import { useWorkout } from './src/useWorkout';
 import { useGong } from './src/useGong';
 
@@ -20,7 +21,7 @@ function KeepScreenOn() {
   return null;
 }
 
-type TimerIcon = 'pause' | 'play' | 'stop' | 'back' | 'restart';
+type TimerIcon = 'pause' | 'play' | 'stop' | 'gear' | 'back' | 'restart';
 
 function IconButton({ icon, label, onPress, disabled = false }: {
   icon: TimerIcon; label: string; onPress: () => void; disabled?: boolean;
@@ -29,8 +30,9 @@ function IconButton({ icon, label, onPress, disabled = false }: {
     pause: <View style={s.pauseIcon}><View style={s.pauseBar} /><View style={s.pauseBar} /></View>,
     play: <View style={s.playIcon} />,
     stop: <View style={s.stopIcon} />,
-    back: <Text style={s.symbol}>←</Text>,
-    restart: <Text style={s.symbol}>↻</Text>,
+    gear: <Image source={require('./assets/icons/settings.png')} style={s.iconImage} accessible={false} />,
+    back: <Image source={require('./assets/icons/back.png')} style={s.iconImage} accessible={false} />,
+    restart: <Image source={require('./assets/icons/reset.png')} style={s.iconImage} accessible={false} />,
   };
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
@@ -63,24 +65,61 @@ function Clock({ seconds, landscape }: { seconds: number; landscape: boolean }) 
 
 function TimerApp() {
   const gong = useGong();
-  const { session, start, togglePause, rewind, end } = useWorkout(gong.ring);
-  const [settings, setSettings] = useState(defaults);
+  const { session, start, togglePause, rewind, stop, clear } = useWorkout(gong.ring);
+  const { settings, setSettings, save, error: storageError } = useLastWorkoutSettings();
+  const [draft, setDraft] = useState<Settings | null>(null);
+  const [wheelVersion, setWheelVersion] = useState(0);
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
   const wideSettings = landscape && width >= 620;
+  const ready = !session || session.ready;
+  const finished = session?.frame.phase === 'finished';
+  const stopped = session?.frame.phase === 'stopped';
+  const terminal = finished || stopped;
+  const inProgress = !ready && !terminal;
 
   function changeSetting(key: keyof Settings, update: (value: number) => number) {
-    setSettings(previous => {
+    setDraft(previous => {
+      if (!previous) return previous;
       const value = update(previous[key]);
       return previous[key] === value ? previous : { ...previous, [key]: value };
     });
   }
 
-  function leave() {
-    if (!session || session.ready || session.frame.phase === 'finished') return end();
-    Alert.alert('練習を終了しますか？', '現在の計時を終了して設定に戻ります。', [
+  function openSettings() {
+    if (!settings) return;
+    if (!inProgress) {
+      setDraft(settings);
+      return;
+    }
+    Alert.alert('練習を終了して設定を開きますか？', '現在の計時を終了します。', [
       { text: 'キャンセル', style: 'cancel' },
-      { text: '終了する', style: 'destructive', onPress: end },
+      { text: '設定を開く', style: 'destructive', onPress: () => {
+        stop();
+        setDraft(settings);
+      } },
+    ]);
+  }
+
+  function applySettings() {
+    if (!draft || !settings || draft.work === 0) return;
+    if (draft.work !== settings.work || draft.rest !== settings.rest || draft.rounds !== settings.rounds) {
+      setSettings(draft);
+      clear();
+    }
+    setDraft(null);
+  }
+
+  function resetSettings() {
+    setDraft(defaults);
+    // Remount the wheels so their scroll offsets match the restored values.
+    setWheelVersion(version => version + 1);
+  }
+
+  function confirmStop() {
+    Alert.alert('練習を終了しますか？', '現在の計時を終了します。', [
+      { text: 'キャンセル', style: 'cancel' },
+      { text: '終了する', style: 'destructive', onPress: stop },
     ]);
   }
 
@@ -91,68 +130,101 @@ function TimerApp() {
     ]);
   }
 
-  useEffect(() => {
-    if (!session) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      leave();
+  const handleBack = useEffectEvent(() => {
+    if (draft) {
+      setDraft(null);
       return true;
-    });
+    }
+    if (inProgress) {
+      confirmStop();
+      return true;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => handleBack());
     return () => sub.remove();
-  }, [session?.frame.phase, session?.ready]);
+  }, []);
 
   const soundError = gong.error && <Text style={s.error}>ゴング音を再生できませんでした。</Text>;
+  const settingsError = storageError && <Text accessibilityLiveRegion="polite" style={s.error}>{storageError}</Text>;
 
-  if (!session) {
-    const invalidDuration = settings.work === 0;
+  if (draft) {
     return (
       <ScrollView nestedScrollEnabled contentContainerStyle={[s.settings, landscape && s.landscapeSettings]}>
-        <StatusBar barStyle="light-content" hidden={false} />
+        <StatusBar barStyle="light-content" hidden={landscape} />
         <View style={[s.form, wideSettings && s.wideForm]}>
-          <Text accessibilityRole="header" style={[s.title, landscape && s.landscapeTitle]}>練習設定</Text>
-          <SettingWheels settings={settings} wide={wideSettings} onChange={changeSetting} />
-          {invalidDuration && <Text style={s.error}>ラウンド時間は1秒以上に設定してください。</Text>}
+          <View style={s.settingsHeading}>
+            <IconButton icon="back" label="設定をキャンセル" onPress={() => setDraft(null)} />
+            <Text accessibilityRole="header" style={[s.title, landscape && s.landscapeTitle]}>設定</Text>
+          </View>
+          <SettingWheels key={wheelVersion} settings={draft} wide={wideSettings} onChange={changeSetting} />
+          {draft.work === 0 && <Text style={s.error}>ラウンド時間は1秒以上に設定してください。</Text>}
+          {settingsError}
           {soundError}
-          <Pressable accessibilityRole="button" disabled={invalidDuration}
-            accessibilityState={{ disabled: invalidDuration }} onPress={() => start(settings)}
-            style={({ pressed }) => [s.start, invalidDuration && s.disabled, pressed && s.pressed]}>
-            <Text style={s.startLabel}>練習を開始</Text>
-          </Pressable>
+          <View style={s.settingsActions}>
+            <Pressable accessibilityRole="button" onPress={resetSettings}
+              style={({ pressed }) => [s.settingsButton, s.resetSettingsButton, pressed && s.pressed]}>
+              <Text style={[s.settingsButtonLabel, s.resetSettingsLabel]}>初期値にリセット</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={draft.work === 0}
+              accessibilityState={{ disabled: draft.work === 0 }} onPress={applySettings}
+              style={({ pressed }) => [s.settingsButton, s.apply, draft.work === 0 && s.disabled, pressed && s.pressed]}>
+              <Text style={s.settingsButtonLabel}>確定</Text>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
     );
   }
 
-  const { frame, ready } = session;
-  const sessionSettings = session.settings;
-  const finished = frame.phase === 'finished';
-  const rest = frame.phase === 'rest';
-  const paused = session.startedAt === null && !finished && !ready;
-  const phase = finished ? '練習終了' : rest ? '休憩' : 'ラウンド';
+  if (!settings) {
+    return (
+      <View style={s.center}>
+        <StatusBar barStyle="light-content" hidden />
+        <Text style={s.loading}>設定を読み込み中…</Text>
+      </View>
+    );
+  }
+
+  const rest = session?.frame.phase === 'rest';
+  const paused = inProgress && session?.startedAt === null;
+  const phase = finished ? '練習終了' : stopped ? '停止' : rest ? '休憩' : 'Round';
+  const round = session?.frame.round ?? 1;
+  const clockSeconds = session?.frame.seconds ?? settings.work;
 
   return (
     <View style={s.timer}>
       <StatusBar barStyle="light-content" hidden />
-      {!finished && <KeepScreenOn />}
+      {session && !terminal && <KeepScreenOn />}
       <View style={s.top}>
+        <IconButton icon="gear" label="設定" onPress={openSettings} />
         <View style={s.status}>
-          <Text style={[s.phase, { color: rest ? colors.rest : colors.amber }]}>
-            {phase}{!finished && ' ' + frame.round + '/' + sessionSettings.rounds}
-            {ready && ' · 開始前'}{paused && ' · 一時停止'}
+          <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
+            style={[s.phase, { color: rest ? colors.rest : colors.amber }]}>
+            {phase}{!terminal && ' ' + round + '/' + settings.rounds}
           </Text>
+          {paused && <Text style={s.detail}>一時停止</Text>}
           {soundError}
+          {settingsError}
         </View>
         <View style={s.controls}>
-          <IconButton icon={finished ? 'restart' : paused || ready ? 'play' : 'pause'}
-            label={finished ? 'もう一度開始' : ready ? '開始' : paused ? '再開' : '一時停止'}
-            onPress={finished ? () => start(sessionSettings) : togglePause} />
-          {!finished && <IconButton icon="restart" label="リセット" onPress={confirmReset} disabled={ready} />}
-          <IconButton icon={finished ? 'back' : 'stop'}
-            label={finished ? '設定に戻る' : '終了'} onPress={leave} />
+          <IconButton icon={paused || ready || terminal ? 'play' : 'pause'}
+            label={terminal ? 'もう一度開始' : ready ? '開始' : paused ? '再開' : '一時停止'}
+            onPress={inProgress ? togglePause : () => {
+              save(settings);
+              start(settings);
+            }} />
+          {!terminal && (
+            <>
+              <IconButton icon="restart" label="リセット" onPress={confirmReset} disabled={ready} />
+              <IconButton icon="stop" label="終了" onPress={confirmStop} disabled={ready} />
+            </>
+          )}
         </View>
       </View>
-      {finished ? (
-        <View style={s.center}><Text style={s.summary}>全{sessionSettings.rounds}ラウンド完了</Text></View>
-      ) : <Clock seconds={frame.seconds} landscape={landscape} />}
+      <Clock seconds={clockSeconds} landscape={landscape} />
     </View>
   );
 }
@@ -169,23 +241,25 @@ export default function App() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  settings: { flexGrow: 1, justifyContent: 'center', padding: 18 },
-  landscapeSettings: { paddingVertical: 8 },
-  form: { width: '100%', maxWidth: 520, alignSelf: 'center', gap: 16 },
+  settings: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12 },
+  landscapeSettings: { paddingTop: 6, paddingBottom: 8 },
+  form: { flexGrow: 1, width: '100%', maxWidth: 520, alignSelf: 'center', gap: 16 },
   wideForm: { maxWidth: 820, gap: 10 },
+  settingsHeading: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   title: { color: colors.white, fontSize: 34, fontWeight: '700' },
   landscapeTitle: { fontSize: 26 },
   error: { color: colors.error, marginTop: 4 },
+  loading: { color: colors.muted, fontSize: 16 },
   timer: { flex: 1, paddingVertical: 4 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12 },
   status: { flex: 1 },
-  phase: { fontSize: 16, fontWeight: '700' },
+  phase: { fontSize: 20, fontWeight: '700' },
+  detail: { color: colors.muted, fontSize: 13 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   clockArea: { marginHorizontal: 12 },
   landscapeClockArea: { marginHorizontal: 4 },
   clock: { width: '100%', textAlign: 'center', color: colors.led, includeFontPadding: false },
   digital: { fontFamily: 'DSEG' },
-  summary: { color: colors.white, fontSize: 32, fontWeight: '700', marginHorizontal: 12 },
   controls: { flexDirection: 'row', gap: 14 },
   iconButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.panel,
     borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },
@@ -195,10 +269,14 @@ const s = StyleSheet.create({
     borderLeftColor: colors.white, borderTopColor: 'transparent', borderBottomColor: 'transparent',
     marginLeft: 2 },
   stopIcon: { width: 14, height: 14, borderRadius: 2, backgroundColor: colors.white },
-  symbol: { fontSize: 22, color: colors.white, includeFontPadding: false },
-  start: { minHeight: 52, paddingHorizontal: 20, borderRadius: 10, justifyContent: 'center',
-    alignItems: 'center', backgroundColor: colors.amber },
-  startLabel: { color: colors.background, fontSize: 17, fontWeight: '700' },
+  iconImage: { width: 24, height: 24, tintColor: colors.white },
+  settingsActions: { flexDirection: 'row', gap: 12, marginTop: 'auto', paddingTop: 6 },
+  settingsButton: { flex: 1, minHeight: 52, paddingHorizontal: 8, paddingVertical: 8,
+    borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  apply: { backgroundColor: colors.amber },
+  resetSettingsButton: { backgroundColor: colors.panel, borderColor: colors.border, borderWidth: 1 },
+  settingsButtonLabel: { color: colors.background, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  resetSettingsLabel: { color: colors.white },
   disabled: { opacity: 0.45 },
   pressed: { opacity: 0.74 },
 });
