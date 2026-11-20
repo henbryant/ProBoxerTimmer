@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import {
-  Alert, BackHandler, Image, Pressable, StatusBar, StyleSheet,
+  Alert, BackHandler, Image, Linking, Modal, Pressable, StatusBar, StyleSheet,
   Text, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -17,13 +17,59 @@ import { useGong } from './src/useGong';
 const clockFonts = { DSEG: require('./assets/DSEG7Classic-Bold.ttf') };
 // This font includes the glyphs used in the settings motto.
 const mottoFonts = { KouzanBrush: require('./assets/KouzanBrush-Motto.otf') };
+const helpSite = 'https://henbryant.github.io/ProBoxerTimmer';
+
+function HelpLinksDialog({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  async function selectPage(page: 'privacy-policy' | 'support') {
+    onClose();
+    try {
+      await Linking.openURL(`${helpSite}/${page}.html`);
+    } catch {
+      Alert.alert('ページを開けませんでした', 'しばらくしてからもう一度お試しください。');
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}
+      supportedOrientations={['portrait', 'portrait-upside-down', 'landscape']}>
+      <SafeAreaView style={s.dialogOverlay}>
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View accessibilityViewIsModal onAccessibilityEscape={onClose} style={s.helpDialog}>
+          <View style={s.dialogHeader}>
+            <Text accessibilityRole="header" maxFontSizeMultiplier={1.6} style={s.dialogTitle}>
+              プライバシーとサポート
+            </Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="閉じる" onPress={onClose}
+              style={({ pressed }) => [s.dialogClose, pressed && s.pressed]}>
+              <Text allowFontScaling={false} style={s.dialogCloseIcon}>×</Text>
+            </Pressable>
+          </View>
+          <View style={s.dialogLinks}>
+            <Pressable accessibilityRole="link" accessibilityLabel="プライバシーポリシー"
+              onPress={() => selectPage('privacy-policy')}
+              style={({ pressed }) => [s.dialogAction, pressed && s.pressed]}>
+              <Text maxFontSizeMultiplier={1.6} style={s.dialogLink}>プライバシーポリシー</Text>
+              <Text allowFontScaling={false} style={s.dialogLinkIcon}>↗</Text>
+            </Pressable>
+            <Pressable accessibilityRole="link" accessibilityLabel="サポート・お問い合わせ"
+              onPress={() => selectPage('support')}
+              style={({ pressed }) => [s.dialogAction, pressed && s.pressed]}>
+              <Text maxFontSizeMultiplier={1.6} style={s.dialogLink}>サポート・お問い合わせ</Text>
+              <Text allowFontScaling={false} style={s.dialogLinkIcon}>↗</Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}
 
 function KeepScreenOn() {
   useKeepAwake('boxing-timer');
   return null;
 }
 
-type TimerIcon = 'pause' | 'play' | 'stop' | 'gear' | 'back' | 'restart';
+type TimerIcon = 'pause' | 'play' | 'stop' | 'gear' | 'back' | 'restart' | 'info';
 
 function IconButton({ icon, label, onPress, disabled = false }: {
   icon: TimerIcon; label: string; onPress: () => void; disabled?: boolean;
@@ -35,6 +81,7 @@ function IconButton({ icon, label, onPress, disabled = false }: {
     gear: <Image source={require('./assets/icons/settings.png')} style={s.iconImage} accessible={false} />,
     back: <Image source={require('./assets/icons/back.png')} style={s.iconImage} accessible={false} />,
     restart: <Image source={require('./assets/icons/reset.png')} style={s.iconImage} accessible={false} />,
+    info: <View style={s.infoIcon}><Text allowFontScaling={false} style={s.infoIconLabel}>i</Text></View>,
   };
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress}
@@ -72,6 +119,7 @@ function TimerApp() {
   const { session, start, togglePause, rewind, stop, clear } = useWorkout(gong.ring);
   const { settings, setSettings, save, error: storageError } = useLastWorkoutSettings();
   const [draft, setDraft] = useState<Settings | null>(null);
+  const [helpVisible, setHelpVisible] = useState(false);
   const [wheelVersion, setWheelVersion] = useState(0);
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
@@ -163,31 +211,37 @@ function TimerApp() {
 
   if (draft) {
     const headingSize = landscape ? s.landscapeHeadingSize : s.headingSize;
+    const motto = landscape && (
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        maxFontSizeMultiplier={settingsFontScaleLimit}
+        style={[
+          s.settingsMotto, wideSettings && s.wideSettingsMotto,
+          mottoFontLoaded && s.settingsMottoBrush,
+        ]}>
+        夢は必ず実現する事
+      </Text>
+    );
 
     return (
       <View style={[s.settings, landscape && s.landscapeSettings]}>
         <StatusBar barStyle="light-content" hidden={landscape} />
         <View style={[s.form, landscape && s.wideForm]}>
-          <View style={[s.settingsHeading, wideSettings && s.wideSettingsHeading]}>
-            <View style={[s.settingsTitle, wideSettings && s.settingsHeadingSide]}>
-              <IconButton icon="back" label="設定をキャンセル" onPress={() => setDraft(null)} />
-              <Text accessibilityRole="header" maxFontSizeMultiplier={settingsFontScaleLimit}
-                style={[s.title, headingSize]}>設定</Text>
+          <View style={s.settingsHeading}>
+            <View style={s.settingsHeadingRow}>
+              <View style={[s.settingsTitle, wideSettings ? s.settingsHeadingSide : s.settingsTitleFill]}>
+                <IconButton icon="back" label="設定をキャンセル" onPress={() => setDraft(null)} />
+                <Text accessibilityRole="header" maxFontSizeMultiplier={settingsFontScaleLimit}
+                  style={[s.title, headingSize]}>設定</Text>
+              </View>
+              {wideSettings && motto}
+              <View style={[s.settingsHelp, wideSettings && s.settingsHeadingSide]}>
+                <IconButton icon="info" label="プライバシーとサポート" onPress={() => setHelpVisible(true)} />
+              </View>
             </View>
-            {landscape && (
-              <Text
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
-                maxFontSizeMultiplier={settingsFontScaleLimit}
-                style={[
-                  s.settingsMotto, wideSettings && s.wideSettingsMotto,
-                  mottoFontLoaded && s.settingsMottoBrush,
-                ]}>
-                夢は必ず実現する事
-              </Text>
-            )}
-            {wideSettings && <View style={s.settingsHeadingSide} />}
+            {!wideSettings && motto}
           </View>
           <View style={s.settingsBody}>
             <SettingWheels key={wheelVersion} settings={draft} wide={landscape} compact={compactSettings}
@@ -211,6 +265,7 @@ function TimerApp() {
             </Pressable>
           </View>
         </View>
+        <HelpLinksDialog visible={helpVisible} onClose={() => setHelpVisible(false)} />
       </View>
     );
   }
@@ -282,9 +337,24 @@ const s = StyleSheet.create({
   form: { flex: 1, width: '100%', maxWidth: 520, alignSelf: 'center', gap: 10 },
   wideForm: { maxWidth: 820 },
   settingsHeading: { minHeight: 52, gap: 4 },
-  wideSettingsHeading: { flexDirection: 'row', alignItems: 'center', gap: 0 },
+  settingsHeadingRow: { flexDirection: 'row', alignItems: 'center', minHeight: 48 },
   settingsTitle: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingsTitleFill: { flex: 1 },
   settingsHeadingSide: { width: 130 },
+  settingsHelp: { alignItems: 'flex-end' },
+  dialogOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.65)' },
+  helpDialog: { width: '90%', maxWidth: 400, borderRadius: 24, borderWidth: 1,
+    borderColor: colors.border, backgroundColor: colors.panel, padding: 16, gap: 20 },
+  dialogHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  dialogTitle: { flex: 1, color: colors.white, fontSize: 19, fontWeight: '700' },
+  dialogClose: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.background,
+    alignItems: 'center', justifyContent: 'center' },
+  dialogCloseIcon: { color: colors.white, fontSize: 24 },
+  dialogLinks: { gap: 10 },
+  dialogAction: { flexDirection: 'row', minHeight: 56, paddingVertical: 12, paddingHorizontal: 14, gap: 12,
+    alignItems: 'center', borderRadius: 14, backgroundColor: colors.background },
+  dialogLink: { flex: 1, color: colors.white, fontSize: 16, fontWeight: '600' },
+  dialogLinkIcon: { color: colors.amber, fontSize: 19 },
   settingsMotto: { color: colors.amber, fontSize: 44, lineHeight: 50, fontWeight: '700', textAlign: 'center' },
   settingsMottoBrush: { fontFamily: 'KouzanBrush', fontWeight: '400' },
   wideSettingsMotto: { flex: 1 },
@@ -314,6 +384,9 @@ const s = StyleSheet.create({
     marginLeft: 2 },
   stopIcon: { width: 14, height: 14, borderRadius: 2, backgroundColor: colors.white },
   iconImage: { width: 24, height: 24, tintColor: colors.white },
+  infoIcon: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5,
+    borderColor: colors.white, justifyContent: 'center', alignItems: 'center' },
+  infoIconLabel: { color: colors.white, fontSize: 14, lineHeight: 17, fontWeight: '700' },
   settingsActions: { flexDirection: 'row', gap: 12 },
   settingsButton: { flex: 1, minHeight: 52, paddingHorizontal: 8, paddingVertical: 8,
     borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
