@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import {
-  Alert, BackHandler, Image, Pressable, ScrollView, StatusBar, StyleSheet,
+  Alert, BackHandler, Image, Pressable, StatusBar, StyleSheet,
   Text, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -16,7 +16,7 @@ import { useGong } from './src/useGong';
 
 const clockFonts = { DSEG: require('./assets/DSEG7Classic-Bold.ttf') };
 // This font includes the glyphs used in the settings motto.
-const mottoFonts = { KouzanBrush: require('./assets/KouzanBrush-Motto.ttf') };
+const mottoFonts = { KouzanBrush: require('./assets/KouzanBrush-Motto.otf') };
 
 function KeepScreenOn() {
   useKeepAwake('boxing-timer');
@@ -75,6 +75,8 @@ function TimerApp() {
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
   const wideSettings = landscape && width >= 620;
+  const compactSettings = height < (landscape ? 360 : 700);
+  const settingsFontScaleLimit = compactSettings ? 1.2 : 1.6;
   const ready = !session || session.ready;
   const finished = session?.frame.phase === 'finished';
   const stopped = session?.frame.phase === 'stopped';
@@ -150,53 +152,65 @@ function TimerApp() {
     return () => sub.remove();
   }, []);
 
-  const soundError = gong.error && <Text style={s.error}>ゴング音を再生できませんでした。</Text>;
-  const settingsError = storageError && <Text accessibilityLiveRegion="polite" style={s.error}>{storageError}</Text>;
+  const errorFontScaleLimit = draft ? settingsFontScaleLimit : undefined;
+  const soundError = gong.error && (
+    <Text maxFontSizeMultiplier={errorFontScaleLimit} style={s.error}>ゴング音を再生できませんでした。</Text>
+  );
+  const settingsError = storageError && (
+    <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={errorFontScaleLimit} style={s.error}>{storageError}</Text>
+  );
 
   if (draft) {
     const headingSize = landscape ? s.landscapeHeadingSize : s.headingSize;
-    const mottoSize = landscape ? s.landscapeMottoSize : s.mottoSize;
 
     return (
-      <ScrollView nestedScrollEnabled contentContainerStyle={[s.settings, landscape && s.landscapeSettings]}>
+      <View style={[s.settings, landscape && s.landscapeSettings]}>
         <StatusBar barStyle="light-content" hidden={landscape} />
-        <View style={[s.form, wideSettings && s.wideForm]}>
+        <View style={[s.form, landscape && s.wideForm]}>
           <View style={[s.settingsHeading, wideSettings && s.wideSettingsHeading]}>
             <View style={[s.settingsTitle, wideSettings && s.settingsHeadingSide]}>
               <IconButton icon="back" label="設定をキャンセル" onPress={() => setDraft(null)} />
-              <Text accessibilityRole="header" style={[s.title, headingSize]}>設定</Text>
+              <Text accessibilityRole="header" maxFontSizeMultiplier={settingsFontScaleLimit}
+                style={[s.title, headingSize]}>設定</Text>
             </View>
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.7}
-              style={[
-                s.settingsMotto, mottoSize, wideSettings && s.wideSettingsMotto,
-                mottoFontLoaded && s.settingsMottoBrush,
-              ]}>
-              夢は必ず実現すること
-            </Text>
+            {landscape && (
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+                maxFontSizeMultiplier={settingsFontScaleLimit}
+                style={[
+                  s.settingsMotto, wideSettings && s.wideSettingsMotto,
+                  mottoFontLoaded && s.settingsMottoBrush,
+                ]}>
+                夢は必ず実現する事
+              </Text>
+            )}
             {wideSettings && <View style={s.settingsHeadingSide} />}
           </View>
           <View style={s.settingsBody}>
-            <SettingWheels key={wheelVersion} settings={draft} wide={wideSettings} onChange={changeSetting} />
-            {draft.work === 0 && <Text style={s.error}>ラウンド時間は1秒以上に設定してください。</Text>}
+            <SettingWheels key={wheelVersion} settings={draft} wide={landscape} compact={compactSettings}
+              fontScaleLimit={settingsFontScaleLimit} onChange={changeSetting} />
+            {draft.work === 0 && (
+              <Text maxFontSizeMultiplier={settingsFontScaleLimit} style={s.error}>ラウンド時間は1秒以上に設定してください。</Text>
+            )}
             {settingsError}
             {soundError}
           </View>
           <View style={s.settingsActions}>
             <Pressable accessibilityRole="button" onPress={resetSettings}
               style={({ pressed }) => [s.settingsButton, s.resetSettingsButton, pressed && s.pressed]}>
-              <Text style={[s.settingsButtonLabel, s.resetSettingsLabel]}>初期値にリセット</Text>
+              <Text maxFontSizeMultiplier={settingsFontScaleLimit}
+                style={[s.settingsButtonLabel, s.resetSettingsLabel]}>初期値にリセット</Text>
             </Pressable>
             <Pressable accessibilityRole="button" disabled={draft.work === 0}
               accessibilityState={{ disabled: draft.work === 0 }} onPress={applySettings}
               style={({ pressed }) => [s.settingsButton, s.apply, draft.work === 0 && s.disabled, pressed && s.pressed]}>
-              <Text style={s.settingsButtonLabel}>確定</Text>
+              <Text maxFontSizeMultiplier={settingsFontScaleLimit} style={s.settingsButtonLabel}>確定</Text>
             </Pressable>
           </View>
         </View>
-      </ScrollView>
+      </View>
     );
   }
 
@@ -262,20 +276,18 @@ export default function App() {
 
 const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  settings: { flexGrow: 1, paddingHorizontal: 18, paddingVertical: 8 },
+  settings: { flex: 1, paddingHorizontal: 18, paddingVertical: 8 },
   landscapeSettings: { paddingVertical: 6 },
-  form: { flexGrow: 1, width: '100%', maxWidth: 520, alignSelf: 'center', gap: 10 },
+  form: { flex: 1, width: '100%', maxWidth: 520, alignSelf: 'center', gap: 10 },
   wideForm: { maxWidth: 820 },
   settingsHeading: { minHeight: 52, gap: 4 },
   wideSettingsHeading: { flexDirection: 'row', alignItems: 'center', gap: 0 },
   settingsTitle: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   settingsHeadingSide: { width: 130 },
-  settingsMotto: { color: colors.amber, fontWeight: '700', textAlign: 'center' },
+  settingsMotto: { color: colors.amber, fontSize: 44, lineHeight: 50, fontWeight: '700', textAlign: 'center' },
   settingsMottoBrush: { fontFamily: 'KouzanBrush', fontWeight: '400' },
   wideSettingsMotto: { flex: 1 },
-  mottoSize: { fontSize: 34, lineHeight: 40 },
-  landscapeMottoSize: { fontSize: 44, lineHeight: 50 },
-  settingsBody: { flexGrow: 1, justifyContent: 'center' },
+  settingsBody: { flex: 1, justifyContent: 'center' },
   title: { color: colors.white, fontWeight: '700', flexShrink: 1 },
   headingSize: { fontSize: 34, lineHeight: 40 },
   landscapeHeadingSize: { fontSize: 26, lineHeight: 32 },
