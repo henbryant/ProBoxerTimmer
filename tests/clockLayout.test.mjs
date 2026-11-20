@@ -37,3 +37,15 @@ test('portrait and the fallback font use proportional digits', () => {
 test('the clock waits for the first layout measurement', () => {
   assert.deepEqual(clockLayout({ width: 0, height: 0 }, true), { fontSize: 0, scaleY: 1 });
 });
+
+test('one-digit minutes use the extra landscape width while respecting the height', () => {
+  const bounds = { width: 730, height: 320 };
+  const singleDigit = clockLayout(bounds, true, true);
+  assert.equal(singleDigit.fontSize, 275);
+  assert.ok(singleDigit.fontSize * singleDigit.scaleY <= bounds.height * 0.96);
+  assert.equal(clockLayout({ width: 880, height: 120 }, true, true).fontSize, 115);
+});
+
+test('one-digit minutes use the extra portrait width without vertical stretching', () => {
+  assert.deepEqual(clockLayout({ width: 360, height: 630 }, false, true), { fontSize: 135, scaleY: 1 });
+});

@@ -1,9 +1,3 @@
----
-layout: default
-title: Firebase設定ガイド
-lang: ja
----
-
 # Firebase設定ガイド
 
 このアプリはFirebase Analyticsでアプリの利用状況を集計し、Firebase Crashlyticsでクラッシュを収集します。Firebase SDKはネイティブ機能を使うため、Expo Goでは動作せず、iOSネイティブビルドが必要です。
@@ -46,7 +40,7 @@ EASでApple DeveloperアカウントなしにiOS Simulator用ビルドを作る�
 npx eas-cli build --platform ios --profile development-simulator
 ```
 
-Crashlyticsは実機のクラッシュを送信後、Crashlyticsダッシュボードで受信を確認します。AnalyticsのイベントはFirebase ConsoleのDebugViewで確認でき、通常の集計レポートへの反映には時間がかかることがあります。リリース前の検証では、本番利用者に影響しないテスト手順で行ってください。
+CrashlyticsはDebugビルドでは既定で無効です。クラッシュの受信は以下のTestFlight手順で確認します。
 
 リリース後はFirebase ConsoleのAnalyticsレポートで「アクティブユーザー」を見てDAUを確認し、Crashlyticsでクラッシュや影響ユーザーを確認します。
 
@@ -55,14 +49,22 @@ Crashlyticsは実機のクラッシュを送信後、Crashlyticsダッシュボ�
 App Store Connectにアプリを作成し、Apple Developer Programの利用資格を用意したうえで、productionビルドを作成して提出します。
 
 ```sh
-npx eas-cli build --platform ios --profile production
-npx eas-cli submit --platform ios --latest
+npx eas-cli build --platform ios --profile production --auto-submit
 ```
 
-提出後、App Store ConnectのTestFlightで処理状況を確認し、テスターに配布します。TestFlightビルドでもAnalyticsとCrashlyticsの動作を確認できます。
+処理が完了したら、対象のビルドを内部テストに追加してiPhoneにインストールします。
+
+1. **Analytics**: アプリを起動し、Firebase ConsoleのAnalyticsのリアルタイムレポートでiOSアプリの `session_start` を確認します。初回起動なら `first_open` も確認できます。
+2. **Crashlytics**: 内部テスト専用のビルドで、一時的なテストボタンの `onPress` から下記の関数を呼び出します。iPhoneでボタンを押してアプリをクラッシュさせ、ホーム画面から再起動してレポートを送信します。Firebase ConsoleのCrashlyticsで対象のビルド番号と、関数名が表示されるスタックトレースを確認します。審査に提出するビルドはテストボタンとコードを削除してから作成します。[Firebaseのテスト手順](https://firebase.google.com/docs/crashlytics/ios/test-implementation)
+
+```ts
+import { crash, getCrashlytics } from '@react-native-firebase/crashlytics';
+
+const sendTestCrash = () => crash(getCrashlytics());
+```
 
 ## App Storeのプライバシー申告
 
-Firebaseを利用するため、[プライバシーポリシー](privacy-policy.md)を確認し、App Store ConnectのApp Privacy申告をFirebase SDKの最新のデータ収集情報に合わせて更新してください。AnalyticsやCrashlyticsが収集する利用状況・診断情報を申告し、広告目的のトラッキングは行わない設定にしています。
+Firebaseを利用するため、[プライバシーポリシー](docs/privacy-policy.md)を確認し、App Store ConnectのApp Privacy申告をFirebase SDKの最新のデータ収集情報に合わせて更新してください。AnalyticsやCrashlyticsが収集する利用状況・診断情報を申告し、広告目的のトラッキングは行わない設定にしています。
 
 Firebase AnalyticsとCrashlyticsは通常の利用では追加料金なしで利用できます。料金条件は変更されることがあるため、[Firebase料金ページ](https://firebase.google.com/pricing)を確認してください。
