@@ -1,6 +1,6 @@
 # ProBoxerTimmer
 
-ボクシングの練習中に、離れた位置からでも残り時間がひと目で分かるラウンドタイマーです。React Native と TypeScript を使い、Android と iOS 向けに開発します。
+ボクシングの練習中に、離れた位置からでも残り時間がひと目で分かるラウンドタイマーです。React Native と TypeScript を使った iOS アプリです。
 
 ## 練習の流れ
 
@@ -19,14 +19,14 @@
 
 ## ローカルで起動
 
-Expo SDK 58 と React Native を使用します。Node.js 24 LTS（24.3 以上）と npm を用意し、リポジトリ直下で実行してください。
+Expo SDK 58 と React Native を使用します。FirebaseのネイティブSDKを使うため、Expo GoではなくiOSネイティブビルドが必要です。Node.js 24 LTS（24.3 以上）と npm、GoogleService-Info.plistを用意し、リポジトリ直下で実行してください。Firebaseの設定とビルド手順は[Firebase設定ガイド](docs/firebase-setup.md)を参照してください。
 
 ```sh
 npm ci
-npm start
+npx expo run:ios
 ```
 
-開発サーバーの QR コードを SDK 58 対応の Expo Go で読み取ります。Android エミュレーターを使用する場合はターミナルで `a`、Mac に Xcode と iOS Simulator を用意した場合は `i` で起動できます。
+ローカルでiOSビルドする場合は、MacにXcodeをインストールしてください。Firebaseを使う開発ビルドとTestFlight用ビルドはEAS Buildを使用します。手順は[Firebase設定ガイド](docs/firebase-setup.md)を参照してください。
 
 ## 確認方法
 

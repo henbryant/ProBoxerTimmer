@@ -10,3 +10,4 @@ lang: ja
 
 - [プライバシーポリシー](privacy-policy.html)
 - [サポート・お問い合わせ](support.html)
+- [Firebase設定ガイド](firebase-setup.html)
