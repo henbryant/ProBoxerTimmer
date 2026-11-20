@@ -41,6 +41,7 @@
         }
       ],
       "@react-native-firebase/crashlytics",
+      "./plugins/withMetroIpOutput",
       [
         "expo-build-properties",
         {
