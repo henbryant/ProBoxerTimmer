@@ -6,10 +6,19 @@
     "orientation": "default",
     "userInterfaceStyle": "dark",
     "platforms": ["android", "ios"],
-    "ios": { "bundleIdentifier": "com.henbryant.proboxertimmer" },
+    "ios": {
+      "bundleIdentifier": "com.henbryant.proboxertimmer",
+      "icon": "./assets/ios-icon.png"
+    },
     "android": { "package": "com.henbryant.proboxertimmer" },
     "plugins": [
       ["expo-audio", { "microphonePermission": false, "recordAudioAndroid": false, "enableBackgroundPlayback": false }]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "d7f13f22-8d28-46eb-80d2-a43e4ba60251"
+      }
+    },
+    "owner": "henbryant"
   }
 }
