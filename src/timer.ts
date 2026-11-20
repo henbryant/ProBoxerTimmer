@@ -32,7 +32,7 @@ export function isGongBoundary(previous: Frame | null, current: Frame) {
 }
 
 export function formatTime(seconds: number) {
-  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const minutes = Math.floor(seconds / 60);
   return minutes + ':' + (seconds % 60).toString().padStart(2, '0');
 }
 

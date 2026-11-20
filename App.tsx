@@ -48,7 +48,8 @@ function IconButton({ icon, label, onPress, disabled = false }: {
 function Clock({ seconds, landscape }: { seconds: number; landscape: boolean }) {
   const [loaded] = useFonts(clockFonts);
   const [bounds, setBounds] = useState({ width: 0, height: 0 });
-  const { fontSize, scaleY } = clockLayout(bounds, landscape && loaded);
+  const time = formatTime(seconds);
+  const { fontSize, scaleY } = clockLayout(bounds, landscape && loaded, time.length === 4);
 
   return (
     <View style={[s.center, landscape ? s.landscapeClockArea : s.clockArea]}
@@ -58,7 +59,7 @@ function Clock({ seconds, landscape }: { seconds: number; landscape: boolean }) 
       {fontSize > 0 && (
         <Text allowFontScaling={false} numberOfLines={1} adjustsFontSizeToFit
           style={[s.clock, loaded && s.digital, { fontSize, transform: [{ scaleY }] }]}>
-          {formatTime(seconds)}
+          {time}
         </Text>
       )}
     </View>

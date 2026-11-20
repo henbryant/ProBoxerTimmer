@@ -31,8 +31,8 @@ test('a single round ends directly and defaults display in minutes and seconds',
   const finished = { phase: 'finished', round: 1, seconds: 0 };
   assert.deepEqual(frameAt(settings, 180000), finished);
   assert.deepEqual(frameAt(settings, 200000), finished);
-  assert.equal(formatTime(defaults.work), '03:00');
-  assert.equal(formatTime(defaults.rest), '00:30');
+  assert.equal(formatTime(defaults.work), '3:00');
+  assert.equal(formatTime(defaults.rest), '0:30');
 });
 
 test('a manual stop shows zero without marking the workout completed', () => {
@@ -49,10 +49,12 @@ test('a manual stop shows zero without marking the workout completed', () => {
   });
 });
 
-test('the timer keeps the same five-character display up to the maximum duration', () => {
-  assert.equal(formatTime(0), '00:00');
-  assert.equal(formatTime(59), '00:59');
-  assert.equal(formatTime(60), '01:00');
+test('the timer displays minutes without zero padding and seconds with two digits', () => {
+  assert.equal(formatTime(0), '0:00');
+  assert.equal(formatTime(59), '0:59');
+  assert.equal(formatTime(60), '1:00');
+  assert.equal(formatTime(599), '9:59');
+  assert.equal(formatTime(600), '10:00');
   assert.equal(formatTime(5999), '99:59');
 });
 
