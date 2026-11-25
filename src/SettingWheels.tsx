@@ -17,11 +17,33 @@ function NumberWheel({ label, unit, value, min = 0, max, fontScaleLimit, onChang
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const options = useMemo(() => Array.from({ length: max - min + 1 }, (_, index) => min + index), [min, max]);
   const offset = useRef({ x: 0, y: (value - min) * rowHeight }).current;
+  const selected = useRef(value);
+  const dragging = useRef(false);
+  const settling = useRef(false);
   const adjustable = min < max;
 
-  function select(next: number) {
-    scroll.current?.scrollTo({ y: (next - min) * rowHeight, animated: false });
+  function updateSelection(next: number) {
+    if (selected.current === next) return;
+    selected.current = next;
     onChange(next);
+  }
+
+  function updateFromOffset(y: number) {
+    updateSelection(Math.min(max, Math.max(min, min + Math.round(y / rowHeight))));
+  }
+
+  function restoreOffset(y: number) {
+    const expected = (selected.current - min) * rowHeight;
+    if (Math.abs(y - expected) > 1) {
+      scroll.current?.scrollTo({ y: expected, animated: false });
+    }
+  }
+
+  function select(next: number) {
+    dragging.current = false;
+    settling.current = false;
+    updateSelection(next);
+    scroll.current?.scrollTo({ y: (next - min) * rowHeight, animated: false });
   }
 
   return (
@@ -40,10 +62,31 @@ function NumberWheel({ label, unit, value, min = 0, max, fontScaleLimit, onChang
           contentContainerStyle={s.wheelContent}
           accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           showsVerticalScrollIndicator={false} scrollEnabled={adjustable} bounces={false} overScrollMode="never"
+          scrollsToTop={false}
           snapToInterval={rowHeight} decelerationRate="fast" scrollEventThrottle={16}
+          onScrollBeginDrag={() => {
+            dragging.current = true;
+            settling.current = false;
+          }}
           onScroll={({ nativeEvent: { contentOffset } }) => {
-            const next = Math.min(max, Math.max(min, min + Math.round(contentOffset.y / rowHeight)));
-            onChange(next);
+            if (dragging.current) {
+              updateFromOffset(contentOffset.y);
+            } else if (!settling.current) {
+              // A modal transition can move the scroll view without a user gesture.
+              restoreOffset(contentOffset.y);
+            }
+          }}
+          onScrollEndDrag={({ nativeEvent: { contentOffset, targetContentOffset } }) => {
+            if (!dragging.current) return;
+            dragging.current = false;
+            const target = targetContentOffset?.y ?? contentOffset.y;
+            settling.current = Math.abs(target - contentOffset.y) > 1;
+            updateFromOffset(target);
+          }}
+          onMomentumScrollEnd={({ nativeEvent: { contentOffset } }) => {
+            if (dragging.current) return;
+            settling.current = false;
+            restoreOffset(contentOffset.y);
           }}>
           {options.map(option => (
             <Pressable key={option} style={s.option} onPress={() => select(option)} accessible={false}>
