@@ -54,13 +54,14 @@ npx eas-cli build --platform ios --profile production --auto-submit
 
 処理が完了したら、対象のビルドを内部テストに追加してiPhoneにインストールします。
 
-1. **Analytics**: アプリを起動し、Firebase ConsoleのAnalyticsのリアルタイムレポートでiOSアプリの `session_start` を確認します。初回起動なら `first_open` も確認できます。
-2. **Crashlytics**: 内部テスト専用のビルドで、一時的なテストボタンの `onPress` から下記の関数を呼び出します。iPhoneでボタンを押してアプリをクラッシュさせ、ホーム画面から再起動してレポートを送信します。Firebase ConsoleのCrashlyticsで対象のビルド番号と、関数名が表示されるスタックトレースを確認します。審査に提出するビルドはテストボタンとコードを削除してから作成します。[Firebaseのテスト手順](https://firebase.google.com/docs/crashlytics/ios/test-implementation)
+1. **同意** — クリーンインストールし、未選択と「共有しない」の状態でタイマーを使えることを確認します。設定右上の情報アイコンから「利用状況とクラッシュの共有」を開いて許可し、再起動後も選択を保持することを確認します。「共有しない」に変更して再起動し、送信が止まることも確認します。Crashlytics の無効化は次回起動時に反映されます。
+2. **Analytics** — 共有を許可した後にアプリを使い、Firebase ConsoleのAnalyticsのリアルタイムレポートで対象iOSアプリのイベントを確認します。確認は検証端末のイベントと区別できる時間帯で行い、通常の集計レポートへの反映には時間がかかることを考慮します。
+3. **Crashlytics** — TestFlight の検証ビルド `1.0.0 (4)` で、共有許可後のテストクラッシュが Firebase に届くことを確認済みです。App Store 審査には `production` プロファイルで作成し、TestFlight でテストしたビルドを選びます。[検証ビルド](https://expo.dev/accounts/henbryant/projects/pro-boxer-timmer/builds/d1968b83-6c67-4d8d-91d7-254ac34cab08) · [Firebaseのテスト手順](https://firebase.google.com/docs/crashlytics/ios/test-implementation)
 
-```ts
-import { crash, getCrashlytics } from '@react-native-firebase/crashlytics';
+`--auto-submit` はビルドと同じ名前の提出プロファイルを使います。自動提出の設定で止まっても、EAS 上のビルドが `FINISHED` になれば、そのビルド ID を指定して再ビルドなしで提出できます。初回は対話モードで App Store Connect の認証を設定します。
 
-const sendTestCrash = () => crash(getCrashlytics());
+```sh
+npx eas-cli submit --platform ios --profile production --id "EASのビルドID"
 ```
 
 ## App Storeのプライバシー申告

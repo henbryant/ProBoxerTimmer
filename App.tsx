@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import {
-  Alert, BackHandler, Image, Linking, Modal, Pressable, StatusBar, StyleSheet,
+  Alert, BackHandler, Image, Linking, Modal, Pressable, ScrollView, StatusBar, StyleSheet,
   Text, useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ import { colors } from './src/colors';
 import { SettingWheels } from './src/SettingWheels';
 import { defaults, formatTime, type Settings } from './src/timer';
 import { useLastWorkoutSettings } from './src/useLastWorkoutSettings';
+import { useMonitoringConsent } from './src/useMonitoringConsent';
 import { useWorkout } from './src/useWorkout';
 import { useGong } from './src/useGong';
 
@@ -19,9 +20,25 @@ const clockFonts = { DSEG: require('./assets/DSEG7Classic-Bold.ttf') };
 const mottoFonts = { KouzanBrush: require('./assets/KouzanBrush-Motto.otf') };
 const helpSite = 'https://henbryant.github.io/ProBoxerTimmer';
 
-function HelpLinksDialog({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+type PrivacyScreen = 'links' | 'monitoring';
+
+function PrivacyDialog({ screen, onClose, onMonitoring, consent }: {
+  screen: PrivacyScreen | null;
+  onClose: () => void;
+  onMonitoring: () => void;
+  consent: ReturnType<typeof useMonitoringConsent>;
+}) {
+  const monitoring = screen === 'monitoring';
+  const { choice, saving, error, choose } = consent;
+  const canChoose = choice !== undefined && !saving;
+  const canClose = !monitoring || !saving;
+
+  function closeDialog() {
+    if (canClose) onClose();
+  }
+
   async function selectPage(page: 'privacy-policy' | 'support') {
-    onClose();
+    if (!monitoring) onClose();
     try {
       await Linking.openURL(`${helpSite}/${page}.html`);
     } catch {
@@ -29,35 +46,77 @@ function HelpLinksDialog({ visible, onClose }: { visible: boolean; onClose: () =
     }
   }
 
+  async function selectConsent(allowed: boolean) {
+    if (await choose(allowed)) onClose();
+  }
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}
+    <Modal visible={screen !== null} transparent animationType="fade" onRequestClose={closeDialog}
       supportedOrientations={['portrait', 'portrait-upside-down', 'landscape']}>
       <SafeAreaView style={s.dialogOverlay}>
-        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View accessibilityViewIsModal onAccessibilityEscape={onClose} style={s.helpDialog}>
+        <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={closeDialog} />
+        <View accessibilityViewIsModal onAccessibilityEscape={closeDialog} style={s.helpDialog}>
           <View style={s.dialogHeader}>
             <Text accessibilityRole="header" maxFontSizeMultiplier={1.6} style={s.dialogTitle}>
-              プライバシーとサポート
+              {monitoring ? '利用状況とクラッシュの共有' : 'プライバシーとサポート'}
             </Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="閉じる" onPress={onClose}
-              style={({ pressed }) => [s.dialogClose, pressed && s.pressed]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="閉じる" onPress={closeDialog} disabled={!canClose}
+              style={({ pressed }) => [s.dialogClose, !canClose && s.disabled, pressed && s.pressed]}>
               <Text allowFontScaling={false} style={s.dialogCloseIcon}>×</Text>
             </Pressable>
           </View>
-          <View style={s.dialogLinks}>
+          <ScrollView style={s.dialogScroll} contentContainerStyle={s.dialogLinks}>
+            {monitoring && (
+              <>
+                <Text maxFontSizeMultiplier={1.6} style={s.monitoringDetails}>
+                  アプリの改善のため、利用状況とクラッシュ診断を Google Firebase に送信してもよいですか？
+                  許可しなくてもタイマーを使えます。この設定はいつでも変更できます。
+                </Text>
+                {choice != null && (
+                  <Text maxFontSizeMultiplier={1.6} style={s.monitoringDetails}>
+                    {choice ? '現在の設定は「共有を許可」です。' : '現在の設定は「共有しない」です。'}
+                  </Text>
+                )}
+                {error && (
+                  <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={1.6} style={s.error}>
+                    共有設定を反映できませんでした。もう一度お試しください。
+                  </Text>
+                )}
+              </>
+            )}
             <Pressable accessibilityRole="link" accessibilityLabel="プライバシーポリシー"
               onPress={() => selectPage('privacy-policy')}
               style={({ pressed }) => [s.dialogAction, pressed && s.pressed]}>
               <Text maxFontSizeMultiplier={1.6} style={s.dialogLink}>プライバシーポリシー</Text>
               <Text allowFontScaling={false} style={s.dialogLinkIcon}>↗</Text>
             </Pressable>
-            <Pressable accessibilityRole="link" accessibilityLabel="サポート・お問い合わせ"
-              onPress={() => selectPage('support')}
-              style={({ pressed }) => [s.dialogAction, pressed && s.pressed]}>
-              <Text maxFontSizeMultiplier={1.6} style={s.dialogLink}>サポート・お問い合わせ</Text>
-              <Text allowFontScaling={false} style={s.dialogLinkIcon}>↗</Text>
-            </Pressable>
-          </View>
+            {monitoring ? (
+              <View style={s.monitoringActions}>
+                <Pressable accessibilityRole="button" disabled={!canChoose} onPress={() => selectConsent(false)}
+                  style={({ pressed }) => [s.dialogAction, s.monitoringButton, !canChoose && s.disabled, pressed && s.pressed]}>
+                  <Text maxFontSizeMultiplier={1.6} style={s.dialogLink}>共有しない</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" disabled={!canChoose} onPress={() => selectConsent(true)}
+                  style={({ pressed }) => [s.dialogAction, s.monitoringButton, !canChoose && s.disabled, pressed && s.pressed]}>
+                  <Text maxFontSizeMultiplier={1.6} style={s.dialogLink}>共有を許可</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Pressable accessibilityRole="link" accessibilityLabel="サポート・お問い合わせ"
+                  onPress={() => selectPage('support')}
+                  style={({ pressed }) => [s.dialogAction, pressed && s.pressed]}>
+                  <Text maxFontSizeMultiplier={1.6} style={s.dialogLink}>サポート・お問い合わせ</Text>
+                  <Text allowFontScaling={false} style={s.dialogLinkIcon}>↗</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" onPress={onMonitoring}
+                  style={({ pressed }) => [s.dialogAction, pressed && s.pressed]}>
+                  <Text maxFontSizeMultiplier={1.6} style={s.dialogLink}>利用状況とクラッシュの共有</Text>
+                  <Text allowFontScaling={false} style={s.dialogLinkIcon}>›</Text>
+                </Pressable>
+              </>
+            )}
+          </ScrollView>
         </View>
       </SafeAreaView>
     </Modal>
@@ -113,13 +172,12 @@ function Clock({ seconds, landscape }: { seconds: number; landscape: boolean }) 
   );
 }
 
-function TimerApp() {
+function TimerApp({ onShowPrivacy }: { onShowPrivacy: () => void }) {
   const [mottoFontLoaded] = useFonts(mottoFonts);
   const gong = useGong();
   const { session, start, togglePause, rewind, stop, clear } = useWorkout(gong.ring);
   const { settings, setSettings, save, error: storageError } = useLastWorkoutSettings();
   const [draft, setDraft] = useState<Settings | null>(null);
-  const [helpVisible, setHelpVisible] = useState(false);
   const [wheelVersion, setWheelVersion] = useState(0);
   const { width, height } = useWindowDimensions();
   const landscape = width > height;
@@ -238,7 +296,7 @@ function TimerApp() {
               </View>
               {wideSettings && motto}
               <View style={[s.settingsHelp, wideSettings && s.settingsHeadingSide]}>
-                <IconButton icon="info" label="プライバシーとサポート" onPress={() => setHelpVisible(true)} />
+                <IconButton icon="info" label="プライバシーとサポート" onPress={onShowPrivacy} />
               </View>
             </View>
             {!wideSettings && motto}
@@ -265,7 +323,6 @@ function TimerApp() {
             </Pressable>
           </View>
         </View>
-        <HelpLinksDialog visible={helpVisible} onClose={() => setHelpVisible(false)} />
       </View>
     );
   }
@@ -321,10 +378,20 @@ function TimerApp() {
 }
 
 export default function App() {
+  const consent = useMonitoringConsent();
+  const [privacyScreen, setPrivacyScreen] = useState<PrivacyScreen | null>(null);
+  const { choice } = consent;
+
+  useEffect(() => {
+    if (choice === null) setPrivacyScreen(current => current ?? 'monitoring');
+  }, [choice]);
+
   return (
     <SafeAreaProvider>
       <SafeAreaView style={s.safe}>
-        <TimerApp />
+        <TimerApp onShowPrivacy={() => setPrivacyScreen('links')} />
+        <PrivacyDialog screen={privacyScreen} consent={consent} onClose={() => setPrivacyScreen(null)}
+          onMonitoring={() => setPrivacyScreen('monitoring')} />
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -343,18 +410,22 @@ const s = StyleSheet.create({
   settingsHeadingSide: { width: 130 },
   settingsHelp: { alignItems: 'flex-end' },
   dialogOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0, 0, 0, 0.65)' },
-  helpDialog: { width: '90%', maxWidth: 400, borderRadius: 24, borderWidth: 1,
+  helpDialog: { width: '90%', maxWidth: 400, maxHeight: '90%', borderRadius: 24, borderWidth: 1,
     borderColor: colors.border, backgroundColor: colors.panel, padding: 16, gap: 20 },
   dialogHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   dialogTitle: { flex: 1, color: colors.white, fontSize: 19, fontWeight: '700' },
   dialogClose: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.background,
     alignItems: 'center', justifyContent: 'center' },
   dialogCloseIcon: { color: colors.white, fontSize: 24 },
+  dialogScroll: { flexGrow: 0, flexShrink: 1 },
   dialogLinks: { gap: 10 },
   dialogAction: { flexDirection: 'row', minHeight: 56, paddingVertical: 12, paddingHorizontal: 14, gap: 12,
     alignItems: 'center', borderRadius: 14, backgroundColor: colors.background },
   dialogLink: { flex: 1, color: colors.white, fontSize: 16, fontWeight: '600' },
   dialogLinkIcon: { color: colors.amber, fontSize: 19 },
+  monitoringDetails: { color: colors.muted, fontSize: 15, lineHeight: 23 },
+  monitoringActions: { flexDirection: 'row', gap: 10 },
+  monitoringButton: { flex: 1, borderWidth: 1, borderColor: colors.border },
   settingsMotto: { color: colors.amber, fontSize: 44, lineHeight: 50, fontWeight: '700', textAlign: 'center' },
   settingsMottoBrush: { fontFamily: 'KouzanBrush', fontWeight: '400' },
   wideSettingsMotto: { flex: 1 },
