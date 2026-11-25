@@ -1,4 +1,4 @@
-const { withXcodeProject } = require('@expo/config-plugins');
+const { withXcodeProject } = require('expo/config-plugins');
 
 const phaseName = '"Bundle React Native code and images"';
 const ipFile = '"$(CONFIGURATION_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/ip.txt"';
