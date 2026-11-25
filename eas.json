@@ -20,5 +20,10 @@
         "autoIncrement": true
       }
     }
+  },
+  "submit": {
+    "production": {
+      "ios": {}
+    }
   }
 }
