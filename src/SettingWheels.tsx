@@ -40,6 +40,7 @@ function NumberWheel({ label, unit, value, min = 0, max, fontScaleLimit, onChang
           contentContainerStyle={s.wheelContent}
           accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           showsVerticalScrollIndicator={false} scrollEnabled={adjustable} bounces={false} overScrollMode="never"
+          scrollsToTop={false}
           snapToInterval={rowHeight} decelerationRate="fast" scrollEventThrottle={16}
           onScroll={({ nativeEvent: { contentOffset } }) => {
             const next = Math.min(max, Math.max(min, min + Math.round(contentOffset.y / rowHeight)));
